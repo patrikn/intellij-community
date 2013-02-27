@@ -29,6 +29,8 @@ import com.intellij.openapi.ui.TypingTarget;
 import com.intellij.openapi.util.ActionCallback;
 import com.intellij.ui.components.Magnificator;
 import com.intellij.util.Consumer;
+import com.intellij.util.containers.ConcurrentHashSet;
+import com.intellij.util.containers.ConcurrentWeakHashMap;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -37,12 +39,18 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ComponentEvent;
 import java.awt.event.InputMethodEvent;
+import java.awt.event.KeyEvent;
+import java.awt.im.InputContext;
 import java.awt.im.InputMethodRequests;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class EditorComponentImpl extends JComponent implements Scrollable, DataProvider, Queryable, TypingTarget {
   private final EditorImpl myEditor;
   private final ApplicationImpl myApplication;
+  private final ThreadLocal<KeyEvent> inFlight = new ThreadLocal<KeyEvent>();
 
   public EditorComponentImpl(@NotNull EditorImpl editor) {
     myEditor = editor;
@@ -124,6 +132,36 @@ public class EditorComponentImpl extends JComponent implements Scrollable, DataP
       }
       e.consume();
     }
+  }
+
+  @Override
+  public InputContext getInputContext() {
+    InputContext inputContext = super.getInputContext();
+    return new InputContext() {
+      @Override
+      public void dispatchEvent(AWTEvent event) {
+        // Let the IDE event queue see the event first, so that key
+        // bindings override input method bindings
+        // We also need to keep track of events we've already seen
+        // because the event queue dispatches back here if there
+        // is no key binding
+        if (event instanceof KeyEvent && inFlight.get() != event) {
+          try {
+            inFlight.set((KeyEvent)event);
+            IdeEventQueue.getInstance().dispatchEvent(event);
+          }
+          finally {
+            inFlight.remove();
+          }
+
+          if (((KeyEvent) event).isConsumed()) {
+            return;
+          }
+        }
+        // Not consumed -> let input methods do its thing
+        super.dispatchEvent(event);
+      }
+    };
   }
 
   @Override

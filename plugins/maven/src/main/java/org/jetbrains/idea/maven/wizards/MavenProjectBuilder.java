@@ -26,10 +26,12 @@ import com.intellij.openapi.projectRoots.JavaSdk;
 import com.intellij.openapi.projectRoots.SdkTypeId;
 import com.intellij.openapi.roots.ui.configuration.ModulesConfigurator;
 import com.intellij.openapi.roots.ui.configuration.ModulesProvider;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.packaging.artifacts.ModifiableArtifactModel;
 import com.intellij.projectImport.ProjectImportBuilder;
+import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.maven.importing.MavenDefaultModifiableModelsProvider;
@@ -102,8 +104,25 @@ public class MavenProjectBuilder extends ProjectImportBuilder<MavenProject> {
     settings.generalSettings = getGeneralSettings();
     settings.importingSettings = getImportingSettings();
 
+    String settingsFile = System.getProperty("idea.maven.import.settings.file");
+    if (!StringUtil.isEmptyOrSpaces(settingsFile)) {
+      settings.generalSettings.setUserSettingsFile(settingsFile.trim());
+    }
+
+    List<String> selectedProfiles = getSelectedProfiles();
+
+    String profilesList = System.getProperty("idea.maven.import.enabled.profiles");
+    if (profilesList != null) {
+      Set<String> selectedProfilesSet = new LinkedHashSet<String>(selectedProfiles);
+      for (String profile : StringUtil.split(profilesList, ",")) {
+        selectedProfilesSet.add(profile.trim());
+      }
+
+      selectedProfiles = new ArrayList<String>(selectedProfilesSet);
+    }
+
     MavenProjectsManager manager = MavenProjectsManager.getInstance(project);
-    manager.addManagedFilesWithProfiles(MavenUtil.collectFiles(getParameters().mySelectedProjects), getSelectedProfiles());
+    manager.addManagedFilesWithProfiles(MavenUtil.collectFiles(getParameters().mySelectedProjects), selectedProfiles);
     manager.waitForReadingCompletion();
 
     boolean isFromUI = model != null;

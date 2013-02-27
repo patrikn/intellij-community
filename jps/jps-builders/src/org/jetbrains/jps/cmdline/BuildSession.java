@@ -13,10 +13,12 @@ import org.jboss.netty.channel.Channels;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.api.*;
 import org.jetbrains.jps.builders.BuildRootDescriptor;
+import org.jetbrains.jps.builders.BuildTargetIndex;
+import org.jetbrains.jps.builders.BuildTargetRegistry;
+import org.jetbrains.jps.builders.ModuleBasedTarget;
 import org.jetbrains.jps.builders.java.JavaModuleBuildTargetType;
 import org.jetbrains.jps.builders.java.dependencyView.Callbacks;
 import org.jetbrains.jps.incremental.MessageHandler;
-import org.jetbrains.jps.incremental.ModuleBuildTarget;
 import org.jetbrains.jps.incremental.Utils;
 import org.jetbrains.jps.incremental.fs.BuildFSState;
 import org.jetbrains.jps.incremental.fs.FSState;
@@ -363,19 +365,7 @@ final class BuildSession implements Runnable, CanceledStatus {
       try {
         out.writeInt(FSState.VERSION);
         out.writeLong(myLastEventOrdinal);
-        boolean hasWorkToDoWithModules = false;
-        for (JpsModule module : pd.getProject().getModules()) {
-          for (JavaModuleBuildTargetType type : JavaModuleBuildTargetType.ALL_TYPES) {
-            if (state.hasWorkToDo(new ModuleBuildTarget(module, type))) {
-              hasWorkToDoWithModules = true;
-              break;
-            }
-          }
-          if (hasWorkToDoWithModules) {
-            break;
-          }
-        }
-        out.writeBoolean(hasWorkToDoWithModules);
+        out.writeBoolean(hasWorkToDo(state, pd));
         state.save(out);
       }
       finally {
@@ -388,6 +378,18 @@ final class BuildSession implements Runnable, CanceledStatus {
       LOG.error(e);
       FileUtil.delete(file);
     }
+  }
+
+  private static boolean hasWorkToDo(BuildFSState state, ProjectDescriptor pd) {
+    final BuildTargetIndex targetIndex = pd.getBuildTargetIndex();
+    for (JpsModule module : pd.getProject().getModules()) {
+      for (ModuleBasedTarget<?> target : targetIndex.getModuleBasedTargets(module, BuildTargetRegistry.ModuleTargetSelector.ALL)) {
+        if (state.hasWorkToDo(target)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   private static void saveOnDisk(BufferExposingByteArrayOutputStream bytes, final File file) throws IOException {

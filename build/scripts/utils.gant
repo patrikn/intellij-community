@@ -52,8 +52,8 @@ binding.setVariable("isEap", {
   return "true" == p("component.version.eap")
 })
 
-binding.setVariable("mem32", "-server -Xms128m -Xmx512m -XX:MaxPermSize=250m -XX:ReservedCodeCacheSize=64m -XX:+UseCodeCacheFlushing -XX:+UseConcMarkSweepGC -XX:+CMSIncrementalMode -XX:+UseParNewGC")
-binding.setVariable("mem64", "-Xms128m -Xmx800m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=64m -XX:+UseCodeCacheFlushing -XX:+UseConcMarkSweepGC -XX:+CMSIncrementalMode -XX:+UseParNewGC")
+binding.setVariable("mem32", "-server -Xms128m -Xmx512m -XX:MaxPermSize=250m -XX:ReservedCodeCacheSize=64m -XX:+UseCodeCacheFlushing -XX:+UseConcMarkSweepGC -XX:SoftRefLRUPolicyMSPerMB=50")
+binding.setVariable("mem64", "-Xms128m -Xmx750m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=96m -XX:+UseCodeCacheFlushing -XX:+UseConcMarkSweepGC -XX:SoftRefLRUPolicyMSPerMB=50")
 binding.setVariable("common_vmoptions", "-ea -Dsun.io.useCanonCaches=false -Djava.net.preferIPv4Stack=true")
 
 binding.setVariable("vmOptions", { "$common_vmoptions ${isEap() ? '-XX:+HeapDumpOnOutOfMemoryError' : ''}".trim() })
@@ -181,7 +181,7 @@ def debugPort = System.getProperty("debug.port") ?: 5555
 if (suspendUntilDebuggerConnect == 'y') {
   println """\
 ------------->----------- This process is suspended until remote debugger connects to the port $debugPort ----<----
--------------------------------------------^------^------^------^------^------^------^-----------------------  
+-------------------------------------------^------^------^------^------^------^------^-----------------------
 """
 }
 
@@ -250,10 +250,12 @@ binding.setVariable("platformApiModules", [
         "platform-api",
         "lvcs-api",
         "lang-api",
+        "analysis-api",
         "vcs-api",
         "usageView",
         "xdebugger-api",
         "xml-openapi",
+        "external-system-api",
 ])
 
 
@@ -266,6 +268,7 @@ binding.setVariable("platformImplementationModules", [
         "platform-impl",
         "vcs-impl",
         "lang-impl",
+        "analysis-impl",
         "testRunner",
         "smRunner",
         "xdebugger-impl",
@@ -726,3 +729,41 @@ private void fixIdeaPropertiesEol(List paths, String eol) {
     }
   }
 }
+
+binding.setVariable("buildWinLauncher", { String ch, String inputPath, String outputPath, String appInfo, String launcherProperties, String pathsSelector, List resourcePaths ->
+  projectBuilder.stage("winLauncher")
+
+  File launcherPropertiesTempFile = null;
+  if (pathsSelector != null) {
+    String propertiesContent = new File(launcherProperties).text
+    if (propertiesContent.contains("__PRODUCT_PATHS_SELECTOR__")) {
+      propertiesContent = propertiesContent.replace("__PRODUCT_PATHS_SELECTOR__", pathsSelector)
+      launcherPropertiesTempFile = File.createTempFile("launcher", ".properties")
+      launcherPropertiesTempFile.write(propertiesContent)
+      launcherProperties = launcherPropertiesTempFile.getAbsolutePath()
+    }
+  }
+
+  ant.java(classname: "com.pme.launcher.LauncherGeneratorMain", fork: "true") {
+    arg(value: inputPath)
+    arg(value: appInfo)
+    arg(value: "$ch/native/WinLauncher/WinLauncher/resource.h")
+    arg(value: launcherProperties)
+    arg(value: outputPath)
+    classpath {
+      pathelement(location: "$ch/build/lib/launcher-generator.jar")
+      fileset(dir: "$ch/lib") {
+        include(name: "guava*.jar")
+        include(name: "jdom.jar")
+        include(name: "sanselan*.jar")
+      }
+      resourcePaths.each {
+        pathelement(location: it)
+      }
+    }
+  }
+
+  if (launcherPropertiesTempFile != null) {
+    launcherPropertiesTempFile.delete()
+  }
+})

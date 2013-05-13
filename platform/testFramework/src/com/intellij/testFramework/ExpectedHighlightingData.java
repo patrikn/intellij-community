@@ -423,12 +423,12 @@ public class ExpectedHighlightingData {
     String fileName = myFile == null ? "" : myFile.getName() + ": ";
     String failMessage = "";
 
-    for (HighlightInfo info : infos) {
+    for (HighlightInfo info : reverseCollection(infos)) {
       if (!expectedInfosContainsInfo(info)) {
         final int startOffset = info.startOffset;
         final int endOffset = info.endOffset;
         String s = text.substring(startOffset, endOffset);
-        String desc = info.description;
+        String desc = info.getDescription();
 
         int y1 = StringUtil.offsetToLineNumber(text, startOffset);
         int y2 = StringUtil.offsetToLineNumber(text, endOffset);
@@ -447,14 +447,14 @@ public class ExpectedHighlightingData {
     }
 
     final Collection<ExpectedHighlightingSet> expectedHighlights = highlightingTypes.values();
-    for (ExpectedHighlightingSet highlightingSet : expectedHighlights) {
+    for (ExpectedHighlightingSet highlightingSet : reverseCollection(expectedHighlights)) {
       final Set<HighlightInfo> expInfos = highlightingSet.infos;
       for (HighlightInfo expectedInfo : expInfos) {
         if (!infosContainsExpectedInfo(infos, expectedInfo) && highlightingSet.enabled) {
           final int startOffset = expectedInfo.startOffset;
           final int endOffset = expectedInfo.endOffset;
           String s = text.substring(startOffset, endOffset);
-          String desc = expectedInfo.description;
+          String desc = expectedInfo.getDescription();
 
           int y1 = StringUtil.offsetToLineNumber(text, startOffset);
           int y2 = StringUtil.offsetToLineNumber(text, endOffset);
@@ -477,6 +477,10 @@ public class ExpectedHighlightingData {
     }
   }
 
+  private static <T> List<T> reverseCollection(Collection<T> infos) {
+    return ContainerUtil.reverse(infos instanceof List ? (List<T>)infos : new ArrayList<T>(infos));
+  }
+
   private void compareTexts(Collection<HighlightInfo> infos, String text, String failMessage, @Nullable String filePath) {
     String actual = composeText(highlightingTypes,  infos, text);
     if (filePath != null && !myText.equals(actual)) {
@@ -496,7 +500,7 @@ public class ExpectedHighlightingData {
       public Pair<String, HighlightInfo> fun(HighlightInfo info) {
         for (Map.Entry<String, ExpectedHighlightingSet> entry : types.entrySet()) {
           final ExpectedHighlightingSet set = entry.getValue();
-          if (set.enabled && set.severity == info.getSeverity() && set.endOfLine == info.isAfterEndOfLine) {
+          if (set.enabled && set.severity == info.getSeverity() && set.endOfLine == info.isAfterEndOfLine()) {
             return Pair.create(entry.getKey(), info);
           }
         }
@@ -514,19 +518,19 @@ public class ExpectedHighlightingData {
         int byEnds = i2.endOffset - i1.endOffset;
         if (byEnds != 0) return byEnds;
 
-        if (!i1.isAfterEndOfLine && !i2.isAfterEndOfLine) {
+        if (!i1.isAfterEndOfLine() && !i2.isAfterEndOfLine()) {
           int byStarts = i1.startOffset - i2.startOffset;
           if (byStarts != 0) return byStarts;
         }
         else {
-          int byEOL = Comparing.compare(i2.isAfterEndOfLine, i1.isAfterEndOfLine);
+          int byEOL = Comparing.compare(i2.isAfterEndOfLine(), i1.isAfterEndOfLine());
           if (byEOL != 0) return byEOL;
         }
 
         int bySeverity = i2.getSeverity().compareTo(i1.getSeverity());
         if (bySeverity != 0) return bySeverity;
 
-        return Comparing.compare(i1.description, i2.description);
+        return Comparing.compare(i1.getDescription(), i2.getDescription());
       }
     });
 
@@ -560,7 +564,7 @@ public class ExpectedHighlightingData {
         endPos = result.second;
       }
       sb.insert(0, text.substring(info.startOffset, endPos));
-      sb.insert(0, "<" + severity + " descr=\"" + info.description + "\">");
+      sb.insert(0, "<" + severity + " descr=\"" + info.getDescription() + "\">");
 
       endPos = info.startOffset;
       i++;
@@ -600,9 +604,10 @@ public class ExpectedHighlightingData {
       info.getSeverity() == expectedInfo.getSeverity() &&
       info.startOffset == expectedInfo.startOffset &&
       info.endOffset == expectedInfo.endOffset &&
-      info.isAfterEndOfLine == expectedInfo.isAfterEndOfLine &&
+      info.isAfterEndOfLine() == expectedInfo.isAfterEndOfLine() &&
       (expectedInfo.type == WHATEVER || expectedInfo.type.equals(info.type)) &&
-      (Comparing.strEqual(ANY_TEXT, expectedInfo.description) || Comparing.strEqual(info.description, expectedInfo.description)) &&
+      (Comparing.strEqual(ANY_TEXT, expectedInfo.getDescription()) || Comparing.strEqual(info.getDescription(),
+                                                                                         expectedInfo.getDescription())) &&
       (expectedInfo.forcedTextAttributes == null || Comparing.equal(expectedInfo.getTextAttributes(null, null),
                                                                     info.getTextAttributes(null, null))) &&
       (expectedInfo.forcedTextAttributesKey == null || expectedInfo.forcedTextAttributesKey.equals(info.forcedTextAttributesKey));

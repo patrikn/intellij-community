@@ -1720,4 +1720,67 @@ class Baz {}''', '', CompletionType.BASIC, CompletionResult.contain, 'xxx', 'yyy
     myFixture.completeBasic()
     myFixture.assertPreferredCompletionItems 0, "message", "messages"
   }
+
+  void testFieldCompletionFromJavaClass() {
+    myFixture.addClass("""\
+class Base {
+    static public Base foo;
+}
+
+class Inheritor extends Base {
+    static public Inheritor foo;
+}
+""")
+
+    doVariantableTest('Inheritor.fo<caret>','', CompletionType.BASIC, CompletionResult.equal, 'foo', 'forName', 'forName')
+  }
+
+  void testBinding1() {
+   doCompletionTest('''\
+aaa = 5
+print aa<caret>
+''', '''\
+aaa = 5
+print aaa<caret>
+''', CompletionType.BASIC)
+  }
+
+  void testBinding2() {
+    doCompletionTest('''\
+def foo() {
+  aaa = 5
+}
+print aa<caret>
+''', '''\
+def foo() {
+  aaa = 5
+}
+print aaa<caret>
+''', CompletionType.BASIC)
+  }
+
+
+  void testBinding3() {
+    doVariantableTest('''\
+def x() {
+  aaa = 5
+}
+
+aaaa = 6
+print aa<caret>
+''', CompletionType.BASIC, 'aaa', 'aaaa')
+  }
+
+  void testCompleteRefInLValue() {
+    myFixture.addClass('''\
+public class Util {
+    public int CONST = 4;
+}
+''')
+    doVariantableTest('''\
+def foo(Util util) {
+  util.CONS<caret>T = 3
+}
+''', '', CompletionType.BASIC, CompletionResult.contain, 'CONST')
+  }
 }

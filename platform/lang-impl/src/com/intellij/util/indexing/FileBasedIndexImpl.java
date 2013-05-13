@@ -21,6 +21,7 @@ import com.intellij.history.LocalHistory;
 import com.intellij.ide.caches.CacheUpdater;
 import com.intellij.ide.util.DelegatingProgressIndicator;
 import com.intellij.lang.ASTNode;
+import com.intellij.lang.LangBundle;
 import com.intellij.notification.NotificationDisplayType;
 import com.intellij.notification.NotificationGroup;
 import com.intellij.notification.NotificationType;
@@ -118,7 +119,7 @@ public class FileBasedIndexImpl extends FileBasedIndex {
   private final ConcurrentHashSet<ID<?, ?>> myUpToDateIndices = new ConcurrentHashSet<ID<?, ?>>();
   private final Map<Document, PsiFile> myTransactionMap = new THashMap<Document, PsiFile>();
 
-  private static final int ALREADY_PROCESSED = 0x04;
+  private static final int ALREADY_PROCESSED = 0x04000000;
 
   @Nullable private final String myConfigPath;
   @Nullable private final String myLogPath;
@@ -383,17 +384,30 @@ public class FileBasedIndexImpl extends FileBasedIndex {
       IndexInfrastructure.rewriteVersion(versionFile, version);
     }
 
-    MapIndexStorage<K, V> storage = null;
+    compactIndex(extension, version, versionFile);
+    return versionChanged;
+  }
 
+  private <K, V> void compactIndex(final FileBasedIndexExtension<K, V> extension, int version, File versionFile)
+    throws IOException {
+    MapIndexStorage<K, V> storage = null;
+    final ID<K, V> name = extension.getName();
     for (int attempt = 0; attempt < 2; attempt++) {
       try {
-        storage = new MapIndexStorage<K, V>(
-          IndexInfrastructure.getStorageFile(name),
-          extension.getKeyDescriptor(),
-          extension.getValueExternalizer(),
-          extension.getCacheSize(),
-          extension.isKeyHighlySelective()
-        );
+        storage = ProgressManager
+          .getInstance().runProcessWithProgressSynchronously(new ThrowableComputable<MapIndexStorage<K, V>, IOException>() {
+          @Override
+          public MapIndexStorage<K, V> compute() throws IOException {
+            return new MapIndexStorage<K, V>(
+              IndexInfrastructure.getStorageFile(name),
+              extension.getKeyDescriptor(),
+              extension.getValueExternalizer(),
+              extension.getCacheSize(),
+              extension.isKeyHighlySelective()
+            );
+          }
+        }, LangBundle.message("compacting.indices.title"), false, null);
+
         final MemoryIndexStorage<K, V> memStorage = new MemoryIndexStorage<K, V>(storage);
         final UpdatableIndex<K, V, FileContent> index = createIndex(name, extension, memStorage);
         final InputFilter inputFilter = extension.getInputFilter();
@@ -425,7 +439,6 @@ public class FileBasedIndexImpl extends FileBasedIndex {
         IndexInfrastructure.rewriteVersion(versionFile, version);
       }
     }
-    return versionChanged;
   }
 
   private static void saveRegisteredIndices(@NotNull Collection<ID<?, ?>> ids) {
@@ -495,7 +508,32 @@ public class FileBasedIndexImpl extends FileBasedIndex {
       @Override
       public PersistentHashMap<Integer, Collection<K>> create() {
         try {
-          return createIdToDataKeysIndex(indexId, keyDescriptor, storage);
+          // this factory method may be called either on index creation from dispatch thread, or on index rebuild
+          // from arbitrary thread and under some existing progress indicator
+          final ProgressManager progressManager = ProgressManager.getInstance();
+          final ProgressIndicator currentProgress = progressManager.getProgressIndicator();
+          if (currentProgress == null && ApplicationManager.getApplication().isDispatchThread()) {
+            return progressManager.runProcessWithProgressSynchronously(
+              new ThrowableComputable<PersistentHashMap<Integer, Collection<K>>, IOException>() {
+                @Override
+                public PersistentHashMap<Integer, Collection<K>> compute() throws IOException {
+                  return createIdToDataKeysIndex(indexId, keyDescriptor, storage);
+                }
+              }, LangBundle.message("compacting.indices.title"), false, null);
+          }
+          if (currentProgress != null)  {
+            // reuse existing progress indicator if available
+            currentProgress.pushState();
+            currentProgress.setText(LangBundle.message("compacting.indices.title"));
+          }
+          try {
+            return createIdToDataKeysIndex(indexId, keyDescriptor, storage);
+          }
+          finally {
+            if (currentProgress != null) {
+              currentProgress.popState();
+            }
+          }
         }
         catch (IOException e) {
           throw new RuntimeException(e);
@@ -1364,17 +1402,21 @@ public class FileBasedIndexImpl extends FileBasedIndex {
         try {
           for (Document document : documents) {
             allDocsProcessed &= indexUnsavedDocument(document, indexId, project, filter, restrictedFile);
+            ProgressManager.checkCanceled();
           }
         }
         finally {
           semaphore.up();
 
           while (!semaphore.waitFor(500)) { // may need to wait until another thread is done with indexing
+            ProgressManager.checkCanceled();
             if (Thread.holdsLock(PsiLock.LOCK)) {
               break; // hack. Most probably that other indexing threads is waiting for PsiLock, which we're are holding.
             }
           }
           if (allDocsProcessed && !hasActiveTransactions()) {
+            ProgressManager.checkCanceled();
+            // assume all tasks were finished or cancelled in the same time
             myUpToDateIndices.add(indexId); // safe to set the flag here, because it will be cleared under the WriteAction
           }
         }
@@ -1470,56 +1512,38 @@ public class FileBasedIndexImpl extends FileBasedIndex {
     }
 
     final long currentDocStamp = content.getModificationStamp();
-    if (currentDocStamp != myLastIndexedDocStamps.getAndSet(document, requestedIndexId, currentDocStamp)) {
-      final Ref<StorageException> exRef = new Ref<StorageException>(null);
-      ProgressManager.getInstance().executeNonCancelableSection(new Runnable() {
-        @Override
-        public void run() {
-          try {
-            final String contentText = content.getText();
-            if (isTooLarge(vFile, contentText.length())) {
-              return;
-            }
-
-            // Reasonably attempt to use same file content when calculating indices as we can evaluate them several at once and store in file content
-            WeakReference<FileContentImpl> previousContentRef = document.getUserData(ourFileContentKey);
-            FileContentImpl previousContent = previousContentRef != null ? previousContentRef.get() : null;
-            final FileContentImpl newFc;
-            if (previousContent != null && previousContent.getStamp() == currentDocStamp) {
-              newFc = previousContent;
-            }
-            else {
-              newFc = new FileContentImpl(vFile, contentText, vFile.getCharset(), currentDocStamp);
-              document.putUserData(ourFileContentKey, new WeakReference<FileContentImpl>(newFc));
-            }
-
-            if (dominantContentFile != null) {
-              dominantContentFile.putUserData(PsiFileImpl.BUILDING_STUB, true);
-              newFc.putUserData(IndexingDataKeys.PSI_FILE, dominantContentFile);
-            }
-
-            if (content instanceof AuthenticContent) {
-              newFc.putUserData(EDITOR_HIGHLIGHTER, EditorHighlighterCache.getEditorHighlighterForCachesBuilding(document));
-            }
-
-            if (getInputFilter(requestedIndexId).acceptInput(vFile)) {
-              newFc.putUserData(IndexingDataKeys.PROJECT, project);
-              final int inputId = Math.abs(getFileId(vFile));
-              getIndex(requestedIndexId).update(inputId, newFc);
-            }
-
-            if (dominantContentFile != null) {
-              dominantContentFile.putUserData(PsiFileImpl.BUILDING_STUB, null);
-            }
-          }
-          catch (StorageException e) {
-            exRef.set(e);
-          }
+    final long previousDocStamp = myLastIndexedDocStamps.getAndSet(document, requestedIndexId, currentDocStamp);
+    if (currentDocStamp != previousDocStamp) {
+      final String contentText = content.getText();
+      if (!isTooLarge(vFile, contentText.length()) && getInputFilter(requestedIndexId).acceptInput(vFile)) {
+        // Reasonably attempt to use same file content when calculating indices as we can evaluate them several at once and store in file content
+        WeakReference<FileContentImpl> previousContentRef = document.getUserData(ourFileContentKey);
+        FileContentImpl previousContent = previousContentRef != null ? previousContentRef.get() : null;
+        final FileContentImpl newFc;
+        if (previousContent != null && previousContent.getStamp() == currentDocStamp) {
+          newFc = previousContent;
         }
-      });
-      final StorageException storageException = exRef.get();
-      if (storageException != null) {
-        throw storageException;
+        else {
+          newFc = new FileContentImpl(vFile, contentText, vFile.getCharset(), currentDocStamp);
+          document.putUserData(ourFileContentKey, new WeakReference<FileContentImpl>(newFc));
+        }
+
+        initFileContent(newFc, project, dominantContentFile);
+
+        if (content instanceof AuthenticContent) {
+          newFc.putUserData(EDITOR_HIGHLIGHTER, EditorHighlighterCache.getEditorHighlighterForCachesBuilding(document));
+        }
+
+        final int inputId = Math.abs(getFileId(vFile));
+        try {
+          getIndex(requestedIndexId).update(inputId, newFc);
+        } catch (ProcessCanceledException pce) {
+          myLastIndexedDocStamps.getAndSet(document, requestedIndexId, previousDocStamp);
+          throw pce;
+        }
+        finally {
+          cleanFileContent(newFc, dominantContentFile);
+        }
       }
     }
     return true;
@@ -1625,9 +1649,9 @@ public class FileBasedIndexImpl extends FileBasedIndex {
     });
   }
 
-  public void processRefreshedFile(@NotNull Project project, @NotNull final com.intellij.ide.caches.FileContent fileContent) {
+  void processRefreshedFile(@NotNull Project project, @NotNull final com.intellij.ide.caches.FileContent fileContent) {
     myChangedFilesCollector.ensureAllInvalidateTasksCompleted();
-    myChangedFilesCollector.processFileImpl(project, fileContent, false);
+    myChangedFilesCollector.processFileImpl(project, fileContent, false); // ProcessCanceledException will cause readding the file to processing list
   }
 
   public void indexFileContent(@Nullable Project project, @NotNull com.intellij.ide.caches.FileContent content) {
@@ -1649,16 +1673,12 @@ public class FileBasedIndexImpl extends FileBasedIndex {
               currentBytes = ArrayUtil.EMPTY_BYTE_ARRAY;
             }
             fc = new FileContentImpl(file, currentBytes);
-
-            psiFile = content.getUserData(IndexingDataKeys.PSI_FILE);
-            if (psiFile != null) {
-              psiFile.putUserData(PsiFileImpl.BUILDING_STUB, true);
-              fc.putUserData(IndexingDataKeys.PSI_FILE, psiFile);
-            }
             if (project == null) {
               project = ProjectUtil.guessProjectForFile(file);
             }
-            fc.putUserData(IndexingDataKeys.PROJECT, project);
+
+            psiFile = content.getUserData(IndexingDataKeys.PSI_FILE);
+            initFileContent(fc, project, psiFile);
           }
 
           try {
@@ -1666,7 +1686,7 @@ public class FileBasedIndexImpl extends FileBasedIndex {
             updateSingleIndex(indexId, file, fc);
           }
           catch (ProcessCanceledException e) {
-            myChangedFilesCollector.scheduleForUpdate(file);
+            cleanFileContent(fc, psiFile);
             throw e;
           }
           catch (StorageException e) {
@@ -1685,6 +1705,20 @@ public class FileBasedIndexImpl extends FileBasedIndex {
     }
   }
 
+  private static void cleanFileContent(FileContentImpl fc, PsiFile psiFile) {
+    if (psiFile != null) psiFile.putUserData(PsiFileImpl.BUILDING_STUB, false);
+    fc.putUserData(IndexingDataKeys.PSI_FILE, null);
+  }
+
+  private static void initFileContent(FileContentImpl fc, Project project, PsiFile psiFile) {
+    if (psiFile != null) {
+      psiFile.putUserData(PsiFileImpl.BUILDING_STUB, true);
+      fc.putUserData(IndexingDataKeys.PSI_FILE, psiFile);
+    }
+
+    fc.putUserData(IndexingDataKeys.PROJECT, project);
+  }
+
   private void updateSingleIndex(final ID<?, ?> indexId, @NotNull final VirtualFile file, @Nullable final FileContent currentFC)
     throws StorageException {
     if (ourRebuildStatus.get(indexId).get() == REQUIRES_REBUILD) {
@@ -1695,29 +1729,13 @@ public class FileBasedIndexImpl extends FileBasedIndex {
     final int inputId = Math.abs(getFileId(file));
     final UpdatableIndex<?, ?, FileContent> index = getIndex(indexId);
     assert index != null;
-    final Ref<StorageException> exRef = new Ref<StorageException>(null);
 
     final StorageGuard.Holder lock = setDataBufferingEnabled(false);
     try {
-      ProgressManager.getInstance().executeNonCancelableSection(new Runnable() {
-        @Override
-        public void run() {
-          try {
-            index.update(inputId, currentFC);
-          }
-          catch (StorageException e) {
-            exRef.set(e);
-          }
-        }
-      });
+      index.update(inputId, currentFC);
     }
     finally {
       lock.leave();
-    }
-
-    final StorageException storageException = exRef.get();
-    if (storageException != null) {
-      throw storageException;
     }
 
     ApplicationManager.getApplication().runReadAction(new Runnable() {
@@ -2089,6 +2107,10 @@ public class FileBasedIndexImpl extends FileBasedIndex {
             myForceUpdateSemaphore.down();
             // process only files that can affect result
             processFileImpl(project, new com.intellij.ide.caches.FileContent(file), onlyRemoveOutdatedData);
+          } catch (ProcessCanceledException ex) {
+            LOG.assertTrue(!onlyRemoveOutdatedData);
+            myChangedFilesCollector.scheduleForUpdate(file);
+            throw ex;
           }
           finally {
             myForceUpdateSemaphore.up();

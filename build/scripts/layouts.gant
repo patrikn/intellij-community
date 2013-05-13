@@ -61,12 +61,15 @@ def layoutFull(String home, String targetDirectory, String patchedDescriptorDir 
           "java-psi-impl",
           "java-indexing-impl",
           "java-impl",
+          "java-analysis-impl",
+          "analysis-impl",
           "compiler-impl",
           "debugger-impl",
           "dom-impl",
           "execution-impl",
           "jsp-spi",
-          "idea-ui"
+          "idea-ui",
+          "external-system-impl"
           ].flatten()
 
   ant.patternset(id: "resources.included") {
@@ -218,7 +221,11 @@ def layoutFull(String home, String targetDirectory, String patchedDescriptorDir 
   //reorder(targetDirectory)
 }
 
-public def layoutCommunityPlugins(String home) {
+public def layoutCommunityPlugins(String home, String androidHome=null) {
+  if (androidHome == null) {
+    androidHome = "$home/plugins/android"
+  }
+
   dir("plugins") {
     def simplePlugins = ["commander", "copyright", "properties", "java-i18n", "hg4idea", "github", "ui-designer-core", "tasks-time-tracking"]
 
@@ -288,7 +295,7 @@ public def layoutCommunityPlugins(String home) {
       }
       fileset(dir: "$home/plugins/gradle/lib") { include(name: "*.jar") }
     }
-    
+
     layoutPlugin("git4idea") {
       jar("git4idea-rt.jar") {
         module("git4idea-rt")
@@ -434,6 +441,9 @@ public def layoutCommunityPlugins(String home) {
           module("devkit-jps-plugin")
         }
       }
+      fileset(dir: "${home}/plugins/devkit/lib") {
+        include(name: "**/*.jar")
+      }
     }
     layoutPlugin("eclipse") {
       jar("eclipse-jps-plugin.jar") {
@@ -445,9 +455,10 @@ public def layoutCommunityPlugins(String home) {
     }
 
     layoutPlugin("android") {
-      fileset(dir: "${home}/plugins/android/lib") {
+      fileset(dir: "${androidHome}/lib") {
         include(name: "**/*.jar")
         exclude(name: "**/ddmlib_1.jar")
+        exclude(name: "src/*.jar")
       }
 
       jar("android-common.jar") {
@@ -643,6 +654,7 @@ def layoutCommunityJps(String home, String target) {
         moduleTests("jps-model-serialization")
       }
     }
+    jar("ant-jps-plugin.jar") { module("ant-jps-plugin") }
   }
 }
 
@@ -664,7 +676,7 @@ def layout_core(String home, String target) {
     }
 
     fileset(dir: "$home/lib") {
-      include(name: "guava-12.0.jar")
+      include(name: "guava-14.0.1.jar")
       include(name: "picocontainer.jar")
       include(name: "trove4j.jar")
       include(name: "asm.jar")
@@ -697,6 +709,10 @@ def layout_core_upsource(String home, String target) {
       module("java-indexing-impl")
       module("platform-resources")
       module("platform-resources-en")
+      module("analysis-api")
+      module("analysis-impl")
+      module("java-analysis-api")
+      module("java-analysis-impl")
     }
 
     jar("annotations.jar") {
@@ -704,7 +720,7 @@ def layout_core_upsource(String home, String target) {
     }
 
     fileset(dir: "$home/lib") {
-      include(name: "guava-12.0.jar")
+      include(name: "guava-14.0.1.jar")
       include(name: "picocontainer.jar")
       include(name: "trove4j.jar")
       include(name: "asm.jar")

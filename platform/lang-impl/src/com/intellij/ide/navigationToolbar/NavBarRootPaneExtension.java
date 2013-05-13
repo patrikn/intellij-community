@@ -34,6 +34,7 @@ import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.wm.IdeRootPaneNorthExtension;
 import com.intellij.openapi.wm.impl.IdeFrameImpl;
 import com.intellij.ui.ScrollPaneFactory;
+import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.Nullable;
 
@@ -58,7 +59,7 @@ public class NavBarRootPaneExtension extends IdeRootPaneNorthExtension {
     UISettings.getInstance().addUISettingsListener(new UISettingsListener() {
       @Override
       public void uiSettingsChanged(UISettings source) {
-        toggleRunPanel(!source.SHOW_MAIN_TOOLBAR && source.SHOW_NAVIGATION_BAR);
+        toggleRunPanel(!source.SHOW_MAIN_TOOLBAR && source.SHOW_NAVIGATION_BAR && !UISettings.getInstance().PRESENTATION_MODE);
       }
     }, this);
 
@@ -70,7 +71,7 @@ public class NavBarRootPaneExtension extends IdeRootPaneNorthExtension {
   @Override
   public void revalidate() {
     final UISettings settings = UISettings.getInstance();
-    if (!settings.SHOW_MAIN_TOOLBAR && settings.SHOW_NAVIGATION_BAR) {
+    if (!settings.SHOW_MAIN_TOOLBAR && settings.SHOW_NAVIGATION_BAR && !UISettings.getInstance().PRESENTATION_MODE) {
       toggleRunPanel(false);
       toggleRunPanel(true);
     }
@@ -82,7 +83,7 @@ public class NavBarRootPaneExtension extends IdeRootPaneNorthExtension {
   }
 
   public boolean isMainToolbarVisible() {
-    return UISettings.getInstance().SHOW_MAIN_TOOLBAR || !myNavToolbarGroupExist;
+    return !UISettings.getInstance().PRESENTATION_MODE && (UISettings.getInstance().SHOW_MAIN_TOOLBAR || !myNavToolbarGroupExist);
   }
 
   public static boolean runToolbarExists() {
@@ -91,6 +92,7 @@ public class NavBarRootPaneExtension extends IdeRootPaneNorthExtension {
            correctedAction instanceof CustomisedActionGroup && ((CustomisedActionGroup)correctedAction).getFirstAction() != null;
   }
 
+  @Override
   public JComponent getComponent() {
     if (myWrapperPanel == null) {
       myWrapperPanel = new NavBarWrapperPanel(new BorderLayout()) {
@@ -106,12 +108,12 @@ public class NavBarRootPaneExtension extends IdeRootPaneNorthExtension {
         }
       };
       myWrapperPanel.add(buildNavBarPanel(), BorderLayout.CENTER);
-      toggleRunPanel(!UISettings.getInstance().SHOW_MAIN_TOOLBAR);
+      toggleRunPanel(!UISettings.getInstance().SHOW_MAIN_TOOLBAR && !UISettings.getInstance().PRESENTATION_MODE);
     }
 
     return myWrapperPanel;
   }
-  
+
   public static class NavBarWrapperPanel extends JPanel {
     public NavBarWrapperPanel(LayoutManager layout) {
       super(layout);
@@ -158,7 +160,9 @@ public class NavBarRootPaneExtension extends IdeRootPaneNorthExtension {
 
   private boolean isUndocked() {
     final Window ancestor = SwingUtilities.getWindowAncestor(myWrapperPanel);
-    return (ancestor != null && !(ancestor instanceof IdeFrameImpl)) || !UISettings.getInstance().SHOW_MAIN_TOOLBAR;
+    return (ancestor != null && !(ancestor instanceof IdeFrameImpl))
+           || !UISettings.getInstance().SHOW_MAIN_TOOLBAR
+           || !UISettings.getInstance().PRESENTATION_MODE;
   }
 
   private static boolean isNeedGap(final AnAction group) {
@@ -181,7 +185,7 @@ public class NavBarRootPaneExtension extends IdeRootPaneNorthExtension {
           firstAction = action;
           break;
         }
-  
+
         if (firstAction != null) break;
       }
 
@@ -228,7 +232,7 @@ public class NavBarRootPaneExtension extends IdeRootPaneNorthExtension {
       @Override
       public void updateUI() {
         super.updateUI();
-        if (UISettings.getInstance().SHOW_NAVIGATION_BAR) {
+        if (UISettings.getInstance().SHOW_NAVIGATION_BAR && !UISettings.getInstance().PRESENTATION_MODE) {
           SwingUtilities.invokeLater(updater);
         }
       }
@@ -243,10 +247,13 @@ public class NavBarRootPaneExtension extends IdeRootPaneNorthExtension {
         Graphics2D g2d = (Graphics2D) g.create();
         g2d.translate(r.x, r.y);
 
-        Rectangle rectangle =
-          new Rectangle(0, 0, r.width + insets.left + insets.right, r.height + insets.top + insets.bottom);
+        Rectangle rectangle = new Rectangle(0, 0, r.width + insets.left + insets.right, r.height + insets.top + insets.bottom);
         NavBarUIManager.getUI().doPaintNavBarPanel(g2d, rectangle, isMainToolbarVisible(), isUndocked());
-        
+        if (UIUtil.isUnderAquaLookAndFeel() && isUndocked()) {
+          Rectangle bounds = getParent().getBounds();
+          NavBarUIManager.getUI().doPaintWrapperPanel(g2d, bounds, false);
+        }
+
         g2d.dispose();
       }
 
@@ -270,11 +277,12 @@ public class NavBarRootPaneExtension extends IdeRootPaneNorthExtension {
     return panel.get();
   }
 
+  @Override
   public void uiSettingsChanged(final UISettings settings) {
     if (myNavigationBar != null) {
       myNavigationBar.updateState(settings.SHOW_NAVIGATION_BAR);
-      myWrapperPanel.setVisible(settings.SHOW_NAVIGATION_BAR);
-      
+      myWrapperPanel.setVisible(settings.SHOW_NAVIGATION_BAR && !UISettings.getInstance().PRESENTATION_MODE);
+
       myWrapperPanel.revalidate();
       myNavigationBar.revalidate();
       myWrapperPanel.repaint();
@@ -286,11 +294,13 @@ public class NavBarRootPaneExtension extends IdeRootPaneNorthExtension {
     }
   }
 
+  @Override
   @NonNls
   public String getKey() {
     return NAV_BAR;
   }
 
+  @Override
   public void dispose() {
     myWrapperPanel.setVisible(false);
     myWrapperPanel = null;

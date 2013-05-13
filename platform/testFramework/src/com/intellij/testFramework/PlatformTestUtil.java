@@ -46,7 +46,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileFilter;
 import com.intellij.util.Alarm;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.StringBuilderSpinAllocator;
 import com.intellij.util.ThrowableRunnable;
 import com.intellij.util.containers.HashMap;
 import com.intellij.util.io.ZipUtil;
@@ -65,7 +64,6 @@ import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.awt.event.InvocationEvent;
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.text.DecimalFormat;
@@ -84,7 +82,6 @@ import static org.junit.Assert.assertNotNull;
 @SuppressWarnings("UseOfSystemOutOrSystemErr")
 public class PlatformTestUtil {
   public static final boolean COVERAGE_ENABLED_BUILD = "true".equals(System.getProperty("idea.coverage.enabled.build"));
-  public static final CvsVirtualFileFilter CVS_FILE_FILTER = new CvsVirtualFileFilter();
 
   public static <T> void registerExtension(final ExtensionPointName<T> name, final T t, final Disposable parentDisposable) {
     registerExtension(Extensions.getRootArea(), name, t, parentDisposable);
@@ -127,7 +124,7 @@ public class PlatformTestUtil {
     StringBuilder buffer = new StringBuilder();
     final Collection<String> strings = printAsList(tree, withSelection, nodePrintCondition);
     for (String string : strings) {
-      buffer.append(string).append("\n");  
+      buffer.append(string).append("\n");
     }
     return buffer.toString();
   }
@@ -158,37 +155,32 @@ public class PlatformTestUtil {
 
     if (nodePrintCondition != null && !nodePrintCondition.value(nodeText)) return;
 
-    final StringBuilder buff = StringBuilderSpinAllocator.alloc();
-    try {
-      StringUtil.repeatSymbol(buff, ' ', level);
+    final StringBuilder buff = new StringBuilder();
+    StringUtil.repeatSymbol(buff, ' ', level);
 
-      final boolean expanded = tree.isExpanded(new TreePath(defaultMutableTreeNode.getPath()));
-      if (!defaultMutableTreeNode.isLeaf()) {
-        buff.append(expanded ? "-" : "+");
-      }
-
-      final boolean selected = tree.getSelectionModel().isPathSelected(new TreePath(defaultMutableTreeNode.getPath()));
-      if (withSelection && selected) {
-        buff.append("[");
-      }
-
-      buff.append(nodeText);
-
-      if (withSelection && selected) {
-        buff.append("]");
-      }
-
-      strings.add(buff.toString());
-
-      int childCount = tree.getModel().getChildCount(root);
-      if (expanded) {
-        for (int i = 0; i < childCount; i++) {
-          printImpl(tree, tree.getModel().getChild(root, i), strings, level + 1, withSelection, nodePrintCondition);
-        }
-      }
+    final boolean expanded = tree.isExpanded(new TreePath(defaultMutableTreeNode.getPath()));
+    if (!defaultMutableTreeNode.isLeaf()) {
+      buff.append(expanded ? "-" : "+");
     }
-    finally {
-      StringBuilderSpinAllocator.dispose(buff);
+
+    final boolean selected = tree.getSelectionModel().isPathSelected(new TreePath(defaultMutableTreeNode.getPath()));
+    if (withSelection && selected) {
+      buff.append("[");
+    }
+
+    buff.append(nodeText);
+
+    if (withSelection && selected) {
+      buff.append("]");
+    }
+
+    strings.add(buff.toString());
+
+    int childCount = tree.getModel().getChildCount(root);
+    if (expanded) {
+      for (int i = 0; i < childCount; i++) {
+        printImpl(tree, tree.getModel().getChild(root, i), strings, level + 1, withSelection, nodePrintCondition);
+      }
     }
   }
 
@@ -289,7 +281,7 @@ public class PlatformTestUtil {
                                     int maxRowCount,
                                     char paddingChar,
                                     @Nullable Queryable.PrintInfo printInfo) {
-    StringBuilder buffer = StringBuilderSpinAllocator.alloc();
+    StringBuilder buffer = new StringBuilder();
     doPrint(buffer, currentLevel, node, structure, comparator, maxRowCount, 0, paddingChar, printInfo);
     return buffer;
   }
@@ -604,6 +596,10 @@ public class PlatformTestUtil {
     return map;
   }
 
+  public static void assertDirectoriesEqual(VirtualFile dirAfter, VirtualFile dirBefore) throws IOException {
+    assertDirectoriesEqual(dirAfter, dirBefore, null);
+  }
+
   @SuppressWarnings("UnsafeVfsRecursion")
   public static void assertDirectoriesEqual(VirtualFile dirAfter, VirtualFile dirBefore, @Nullable VirtualFileFilter fileFilter) throws IOException {
     FileDocumentManager.getInstance().saveAllDocuments();
@@ -707,8 +703,8 @@ public class PlatformTestUtil {
       try {
         tempDirectory1 = PlatformTestCase.createTempDir("tmp1");
         tempDirectory2 = PlatformTestCase.createTempDir("tmp2");
-        ZipUtil.extract(jarFile1, tempDirectory1, CVS_FILE_FILTER);
-        ZipUtil.extract(jarFile2, tempDirectory2, CVS_FILE_FILTER);
+        ZipUtil.extract(jarFile1, tempDirectory1, null);
+        ZipUtil.extract(jarFile2, tempDirectory2, null);
       }
       finally {
         jarFile2.close();
@@ -729,7 +725,7 @@ public class PlatformTestUtil {
         dirBefore.refresh(false, true);
       }
     });
-    assertDirectoriesEqual(dirAfter, dirBefore, CVS_FILE_FILTER);
+    assertDirectoriesEqual(dirAfter, dirBefore);
   }
 
   public static void assertElementsEqual(final Element expected, final Element actual) throws IOException {
@@ -742,18 +738,6 @@ public class PlatformTestUtil {
     final StringWriter writer = new StringWriter();
     JDOMUtil.writeElement(element, writer, "\n");
     return writer.getBuffer().toString();
-  }
-
-  public static class CvsVirtualFileFilter implements VirtualFileFilter, FilenameFilter {
-    @Override
-    public boolean accept(VirtualFile file) {
-      return !file.isDirectory() || !"CVS".equals(file.getName());
-    }
-
-    @Override
-    public boolean accept(File dir, String name) {
-      return !name.contains("CVS");
-    }
   }
 
   public static String getCommunityPath() {

@@ -21,13 +21,10 @@ package com.intellij.util.io;
 
 import com.intellij.openapi.util.io.ByteSequence;
 import com.intellij.util.containers.SLRUCache;
-import gnu.trove.TIntArrayList;
-import gnu.trove.TLongArrayList;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
-import java.lang.reflect.Array;
 import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
@@ -36,7 +33,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class PersistentHashMapValueStorage {
   @Nullable
   private RAReader myCompactionModeReader = null;
-  private long mySize;
+  private volatile long mySize;
   private final File myFile;
   private final String myPath;
   private boolean myCompactionMode = false;
@@ -66,7 +63,7 @@ public class PersistentHashMapValueStorage {
   public PersistentHashMapValueStorage(String path) throws IOException {
     myPath = path;
     myFile = new File(path);
-    mySize = myFile.length();
+    mySize = myFile.length();  // volatile write
 
     if (mySize == 0) {
       appendBytes(new ByteSequence("Header Record For PersistentHashMapValueStorage".getBytes()), 0);
@@ -89,7 +86,7 @@ public class PersistentHashMapValueStorage {
 
   public long appendBytes(byte[] data, int offset, int dataLength, long prevChunkAddress) throws IOException {
     assert !myCompactionMode;
-    long result = mySize;
+    long result = mySize; // volatile read
     final CacheValue<DataOutputStream> appender = ourAppendersCache.get(myPath);
     int serviceFieldsSizeIncrease;
 
@@ -119,7 +116,7 @@ public class PersistentHashMapValueStorage {
     finally {
       appender.release();
     }
-    mySize += dataLength + serviceFieldsSizeIncrease;
+    mySize += dataLength + serviceFieldsSizeIncrease;  // volatile write
 
     return result;
   }
@@ -151,6 +148,10 @@ public class PersistentHashMapValueStorage {
     int allRecordsLength = 0;
     byte[] stuffFromPreviousRecord = null;
     int bytesRead = (int)(mySize - (mySize / fileBufferLength) * fileBufferLength);
+    long retained = 0;
+    final long softMaxRetainedLimit = 10 * 1024* 1024;
+    final int blockSizeToWriteWhenSoftMaxRetainedLimitIsHit = 1024;
+    final long maxRetainedLimit = 100 * 1024* 1024;
 
     while(lastReadOffset != 0) {
       final long readStartOffset = lastReadOffset - bytesRead;
@@ -200,6 +201,7 @@ public class PersistentHashMapValueStorage {
               b = recordBuffer;
             } else {
               b = new byte[defragmentedChunkSize];
+              retained += defragmentedChunkSize;
             }
             System.arraycopy(info.value, 0, b, chunkSize, info.value.length);
           } else {
@@ -208,6 +210,7 @@ public class PersistentHashMapValueStorage {
               b = recordBuffer;
             } else {
               b = new byte[chunkSize];
+              retained += chunkSize;
             }
           }
 
@@ -235,13 +238,21 @@ public class PersistentHashMapValueStorage {
           records.remove(info);
           if (info.value != null) {
             chunkSize += info.value.length;
+            retained -= info.value.length;
             info.value = null;
           }
 
           if (prevChunkAddress == 0) {
-            info.newValueAddress = storage.appendBytes(b, 0, chunkSize, 0);
+            info.newValueAddress = storage.appendBytes(b, 0, chunkSize, info.newValueAddress);
           } else {
-            info.value = b;
+            if (retained > softMaxRetainedLimit && b.length > blockSizeToWriteWhenSoftMaxRetainedLimitIsHit ||
+                retained > maxRetainedLimit) {
+              info.newValueAddress = storage.appendBytes(b, 0, chunkSize, info.newValueAddress);
+              info.value = null;
+              retained -= b.length;
+            } else {
+              info.value = b;
+            }
             info.valueAddress = prevChunkAddress;
             records.add(info);
           }
@@ -367,6 +378,7 @@ public class PersistentHashMapValueStorage {
   }
 
   public void force() {
+    if (mySize < 0) assert false;  // volatile read
     final CacheValue<DataOutputStream> cached = ourAppendersCache.getIfCached(myPath);
     if (cached != null) {
       try {
@@ -382,6 +394,7 @@ public class PersistentHashMapValueStorage {
   }
 
   public void dispose() {
+    if (mySize < 0) assert false; // volatile read
     ourReadersCache.remove(myPath);
     ourAppendersCache.remove(myPath);
 

@@ -28,6 +28,7 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.Consumer;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.hash.HashSet;
 import icons.JetgroovyIcons;
 import org.jetbrains.annotations.NotNull;
@@ -35,7 +36,9 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.GroovyFileType;
 import org.jetbrains.plugins.groovy.lang.completion.GroovyCompletionUtil;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
+import org.jetbrains.plugins.groovy.lang.psi.GroovyFile;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElement;
+import org.jetbrains.plugins.groovy.lang.psi.GroovyRecursiveElementVisitor;
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
 import org.jetbrains.plugins.groovy.lang.psi.api.SpreadState;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.annotation.GrAnnotation;
@@ -43,6 +46,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.annotation.
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrField;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariable;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.blocks.GrClosableBlock;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrAssignmentExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrReferenceExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrTypeDefinition;
@@ -52,6 +56,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrRe
 import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyPsiManager;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyResolveResultImpl;
 import org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtil;
+import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GrBindingVariable;
 import org.jetbrains.plugins.groovy.lang.psi.typeEnhancers.ClosureParameterEnhancer;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 import org.jetbrains.plugins.groovy.lang.resolve.ClosureMissingMethodContributor;
@@ -127,6 +132,8 @@ public class CompleteReferenceExpression {
       if (qualifier != null) {
         getVariantsFromQualifier(refExpr, processor, qualifier);
       }
+      
+      getBindings(refExpr, processor);
     }
     else {
       if (refExpr.getDotTokenType() != GroovyTokenTypes.mSPREAD_DOT) {
@@ -142,6 +149,38 @@ public class CompleteReferenceExpression {
       }
     }
     ResolveUtil.processCategoryMembers(refExpr, processor, ResolveState.initial());
+  }
+
+  private static void getBindings(final GrReferenceExpression refExpr, final CompleteReferenceProcessor processor) {
+    final PsiClass containingClass = PsiTreeUtil.getParentOfType(refExpr, PsiClass.class);
+    if (containingClass != null) return;
+
+    final PsiFile file = refExpr.getContainingFile();
+    if (file instanceof GroovyFile) {
+      ((GroovyFile)file).accept(new GroovyRecursiveElementVisitor() {
+        @Override
+        public void visitAssignmentExpression(GrAssignmentExpression expression) {
+          super.visitAssignmentExpression(expression);
+
+          final GrExpression value = expression.getLValue();
+          if (value instanceof GrReferenceExpression && !((GrReferenceExpression)value).isQualified()) {
+            final PsiElement resolved = ((GrReferenceExpression)value).resolve();
+            if (resolved instanceof GrBindingVariable) {
+              processor.execute(resolved, ResolveState.initial());
+            }
+            else if (resolved == null) {
+              processor.execute(new GrBindingVariable((GroovyFile)file, ((GrReferenceExpression)value).getReferenceName(), true),
+                                ResolveState.initial());
+            }
+          }
+        }
+
+        @Override
+        public void visitTypeDefinition(GrTypeDefinition typeDefinition) {
+          //don't go into classes
+        }
+      });
+    }
   }
 
   private static void getVariantsFromQualifierForSpreadOperator(GrReferenceExpression refExpr,
@@ -359,7 +398,6 @@ public class CompleteReferenceExpression {
     private final boolean myFieldPointerOperator;
     private final boolean myMethodPointerOperator;
     private final boolean myIsMap;
-    private Set<String> myNonDeclaredVars = new com.intellij.util.containers.HashSet<String>();
     private final SubstitutorComputer mySubstitutorComputer;
 
     protected CompleteReferenceProcessor(GrReferenceExpression place, Consumer<LookupElement> consumer, @NotNull PrefixMatcher matcher, CompletionParameters parameters) {
@@ -389,7 +427,7 @@ public class CompleteReferenceExpression {
     }
 
     @Override
-    public boolean execute(@NotNull PsiElement element, ResolveState state) {
+    public boolean execute(@NotNull PsiElement element, @NotNull ResolveState state) {
       if (element instanceof PsiMethod && ((PsiMethod)element).isConstructor()) return true;
       if (element instanceof PsiNamedElement) {
 
@@ -425,10 +463,6 @@ public class CompleteReferenceExpression {
       PsiElement element = result.getElement();
       if (element instanceof PsiVariable && !myMatcher.prefixMatches(((PsiVariable)element).getName())) {
         return;
-      }
-      if (element instanceof GrReferenceExpression) {
-        String name = ((GrReferenceExpression)element).getReferenceName();
-        if (!myNonDeclaredVars.add(name)) return;
       }
 
       if (element instanceof GrReflectedMethod) {
@@ -517,12 +551,22 @@ public class CompleteReferenceExpression {
       final GroovyResolveResult[] results = ResolveUtil.filterSameSignatureCandidates(getCandidatesInternal());
       List<GroovyResolveResult> list = new ArrayList<GroovyResolveResult>(results.length);
       myPropertyNames.removeAll(myPreferredFieldNames);
+
+      Set<String> usedFields = ContainerUtil.newHashSet();
       for (GroovyResolveResult result : results) {
         final PsiElement element = result.getElement();
-        if (element instanceof PsiField &&
-            (myPropertyNames.contains(((PsiField)element).getName()) || myLocalVars.contains(((PsiField)element).getName()))) {
-          continue;
+        if (element instanceof PsiField) {
+          final String name = ((PsiField)element).getName();
+          if (myPropertyNames.contains(name) ||
+              myLocalVars.contains(name) ||
+              usedFields.contains(name)) {
+            continue;
+          }
+          else {
+            usedFields.add(name);
+          }
         }
+
         list.add(result);
       }
       return list.toArray(new GroovyResolveResult[list.size()]);

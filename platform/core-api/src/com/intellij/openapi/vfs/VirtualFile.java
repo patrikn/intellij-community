@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -135,6 +135,15 @@ public abstract class VirtualFile extends UserDataHolderBase implements Modifica
    * @see VirtualFilePropertyEvent#getPropertyName
    */
   @NonNls public static final String PROP_WRITABLE = "writable";
+
+  /**
+   * Used as a property name in the {@link VirtualFilePropertyEvent} fired when a visibility of a
+   * {@link VirtualFile} changes.
+   *
+   * @see VirtualFileListener#propertyChanged
+   * @see VirtualFilePropertyEvent#getPropertyName
+   */
+  @NonNls public static final String PROP_HIDDEN = "hidden";
 
   /**
    * Gets the extension of this file. If file name contains '.' extension is the substring from the last '.'
@@ -631,11 +640,14 @@ public abstract class VirtualFile extends UserDataHolderBase implements Modifica
    * If this file is a directory the set of its children is refreshed. If recursive value is <code>true</code> all
    * children are refreshed recursively.
    * <p/>
-   * This method should be only called within write-action.
-   * See {@link com.intellij.openapi.application.Application#runWriteAction}.
+   * When invoking synchronous refresh from a thread other than the event dispatch thread, the current thread must
+   * NOT be in a read action, otherwise a deadlock may occur.
    *
-   * @param asynchronous if <code>true</code> then the operation will be performed in a separate thread,
-   *                     otherwise will be performed immediately
+   * @param asynchronous if <code>true</code>, the method will return immediately and the refresh will be processed
+   *                     in the background. If <code>false</code>, the method will return only after the refresh
+   *                     is done and the VFS change events caused by the refresh have been fired and processed
+   *                     in the event dispatch thread. Instead of synchronous refreshes, it's recommended to use
+   *                     asynchronous refreshes with a <code>postRunnable</code> whenever possible.
    * @param recursive    whether to refresh all the files in this directory recursively
    */
   public void refresh(boolean asynchronous, boolean recursive) {

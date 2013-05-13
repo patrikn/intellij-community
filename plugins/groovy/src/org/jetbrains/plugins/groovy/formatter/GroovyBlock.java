@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,16 +22,15 @@ import com.intellij.lang.ASTNode;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.*;
-import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
 import com.intellij.psi.tree.ILazyParseableElementType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.plugins.groovy.codeStyle.GroovyCodeStyleSettings;
 import org.jetbrains.plugins.groovy.formatter.processors.GroovyIndentProcessor;
 import org.jetbrains.plugins.groovy.formatter.processors.GroovySpacingProcessor;
 import org.jetbrains.plugins.groovy.formatter.processors.GroovySpacingProcessorBasic;
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.api.GrDocComment;
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.api.GrDocTag;
+import org.jetbrains.plugins.groovy.lang.lexer.TokenSets;
 import org.jetbrains.plugins.groovy.lang.parser.GroovyElementTypes;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFileBase;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.GrListOrMap;
@@ -63,43 +62,25 @@ public class GroovyBlock implements Block, GroovyElementTypes, ASTBlock {
   protected Alignment myAlignment = null;
   final protected Indent myIndent;
   final protected Wrap myWrap;
-  final protected CommonCodeStyleSettings mySettings;
-  final protected GroovyCodeStyleSettings myGroovySettings;
-  final protected AlignmentProvider myAlignmentProvider;
+
+  final protected FormattingContext myContext;
 
   protected List<Block> mySubBlocks = null;
 
   public GroovyBlock(@NotNull final ASTNode node,
                      @NotNull final Indent indent,
                      @Nullable final Wrap wrap,
-                     final CommonCodeStyleSettings settings,
-                     GroovyCodeStyleSettings groovySettings,
-                     @NotNull AlignmentProvider alignmentProvider) {
+                     FormattingContext context) {
     myNode = node;
 
     myIndent = indent;
     myWrap = wrap;
-    mySettings = settings;
-    myGroovySettings = groovySettings;
-    myAlignmentProvider = alignmentProvider;
+    myContext = context;
   }
 
   @NotNull
   public ASTNode getNode() {
     return myNode;
-  }
-
-  @NotNull
-  public CommonCodeStyleSettings getSettings() {
-    return mySettings;
-  }
-
-  public GroovyCodeStyleSettings getGroovySettings() {
-    return myGroovySettings;
-  }
-
-  public AlignmentProvider getAlignmentProvider() {
-    return myAlignmentProvider;
   }
 
   @NotNull
@@ -141,7 +122,7 @@ public class GroovyBlock implements Block, GroovyElementTypes, ASTBlock {
   @Nullable
   public Alignment getAlignment() {
     if (myAlignment == null) {
-      myAlignment = myAlignmentProvider.getAlignment(myNode.getPsi());
+      myAlignment = myContext.getAlignmentProvider().getAlignment(myNode.getPsi());
     }
 
     return myAlignment;
@@ -161,11 +142,11 @@ public class GroovyBlock implements Block, GroovyElementTypes, ASTBlock {
         return Spacing.getReadOnlySpacing();
       }
 
-      Spacing spacing = new GroovySpacingProcessor(((GroovyBlock)child2).getNode(), mySettings, myGroovySettings).getSpacing();
+      Spacing spacing = new GroovySpacingProcessor(((GroovyBlock)child2).getNode(), myContext).getSpacing();
       if (spacing != null) {
         return spacing;
       }
-      return GroovySpacingProcessorBasic.getSpacing(((GroovyBlock)child1), ((GroovyBlock)child2), mySettings, myGroovySettings);
+      return GroovySpacingProcessorBasic.getSpacing(((GroovyBlock)child1), ((GroovyBlock)child2), myContext);
     }
     return null;
   }
@@ -189,18 +170,18 @@ public class GroovyBlock implements Block, GroovyElementTypes, ASTBlock {
                   statement instanceof GrContinueStatement ||
                   statement instanceof GrReturnStatement ||
                   statement instanceof GrThrowStatement) {
-                return new ChildAttributes(GroovyIndentProcessor.getSwitchCaseIndent(anchorPsi), null);
+                return new ChildAttributes(GroovyIndentProcessor.getSwitchCaseIndent(myContext.getSettings()), null);
               }
             }
             @SuppressWarnings("ConstantConditions")
-            int indentSize = mySettings.getIndentOptions().INDENT_SIZE;
-            return new ChildAttributes(Indent.getSpaceIndent(mySettings.INDENT_CASE_FROM_SWITCH ? 2 * indentSize : indentSize), null);
+            int indentSize = myContext.getSettings().getIndentOptions().INDENT_SIZE;
+            return new ChildAttributes(Indent.getSpaceIndent(myContext.getSettings().INDENT_CASE_FROM_SWITCH ? 2 * indentSize : indentSize), null);
           }
         }
       }
     }
 
-    if (BLOCK_SET.contains(astNode.getElementType()) || SWITCH_STATEMENT.equals(astNode.getElementType())) {
+    if (TokenSets.BLOCK_SET.contains(astNode.getElementType()) || SWITCH_STATEMENT.equals(astNode.getElementType())) {
       return new ChildAttributes(Indent.getNormalIndent(), null);
     }
     if (CASE_SECTION.equals(astNode.getElementType())) {
@@ -259,5 +240,10 @@ public class GroovyBlock implements Block, GroovyElementTypes, ASTBlock {
   @Override
   public String toString() {
     return getTextRange() + ": " + myNode;
+  }
+
+
+  public FormattingContext getContext() {
+    return myContext;
   }
 }

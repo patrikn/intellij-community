@@ -26,9 +26,10 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
-import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.IndexNotReadyException;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.projectRoots.JavaSdkVersion;
+import com.intellij.openapi.projectRoots.JavaVersionService;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.*;
@@ -52,7 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class HighlightVisitorImpl extends JavaElementVisitor implements HighlightVisitor, DumbAware {
+public class HighlightVisitorImpl extends JavaElementVisitor implements HighlightVisitor {
   private final PsiResolveHelper myResolveHelper;
 
   private HighlightInfoHolder myHolder;
@@ -183,6 +184,7 @@ public class HighlightVisitorImpl extends JavaElementVisitor implements Highligh
     if (!myHolder.hasErrorResults()) myHolder.add(AnnotationsHighlightUtil.checkDuplicateAnnotations(annotation));
     if (!myHolder.hasErrorResults()) myHolder.add(AnnotationsHighlightUtil.checkForeignInnerClassesUsed(annotation));
     if (!myHolder.hasErrorResults()) myHolder.add(AnnotationsHighlightUtil.checkFunctionalInterface(annotation));
+    if (!myHolder.hasErrorResults()) myHolder.add(AnnotationsHighlightUtil.checkRepeatableAnnotation(annotation));
   }
 
   @Override
@@ -216,6 +218,7 @@ public class HighlightVisitorImpl extends JavaElementVisitor implements Highligh
 
     myHolder.add(AnnotationsHighlightUtil.checkValidAnnotationType(method.getReturnTypeElement()));
     myHolder.add(AnnotationsHighlightUtil.checkCyclicMemberType(method.getReturnTypeElement(), method.getContainingClass()));
+    myHolder.add(AnnotationsHighlightUtil.checkClashesWithSuperMethods(method));
   }
 
   @Override public void visitArrayInitializerExpression(PsiArrayInitializerExpression expression) {
@@ -464,6 +467,11 @@ public class HighlightVisitorImpl extends JavaElementVisitor implements Highligh
   public void visitField(PsiField field) {
     super.visitField(field);
     if (!myHolder.hasErrorResults()) myHolder.add(HighlightControlFlowUtil.checkFinalFieldInitialized(field));
+  }
+
+  @Override
+  public void visitForStatement(PsiForStatement statement) {
+    myHolder.add(HighlightUtil.checkForStatement(statement));
   }
 
   @Override
@@ -899,6 +907,21 @@ public class HighlightVisitorImpl extends JavaElementVisitor implements Highligh
         myRefCountHolder.registerReference(ref, result);
       }
       myHolder.add(HighlightUtil.checkReference(ref, result));
+      if (!myHolder.hasErrorResults() && resolved instanceof PsiTypeParameter) {
+        boolean cannotSelectFromTypeParameter = !JavaVersionService.getInstance().isAtLeast(ref, JavaSdkVersion.JDK_1_7);
+        if (!cannotSelectFromTypeParameter) {
+          final PsiClass containingClass = PsiTreeUtil.getParentOfType(ref, PsiClass.class);
+          if (containingClass != null) {
+            if (PsiTreeUtil.isAncestor(containingClass.getExtendsList(), ref, false) ||
+                PsiTreeUtil.isAncestor(containingClass.getImplementsList(), ref, false)) {
+              cannotSelectFromTypeParameter = true;
+            }
+          }
+        }
+        if (cannotSelectFromTypeParameter) {
+          myHolder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).descriptionAndTooltip("Cannot select from a type parameter").range(ref).create());
+        }
+      }
     }
     if (!myHolder.hasErrorResults()) myHolder.add(HighlightClassUtil.checkAbstractInstantiation(ref, resolved));
     if (!myHolder.hasErrorResults()) myHolder.add(HighlightClassUtil.checkExtendsDuplicate(ref, resolved));
@@ -944,6 +967,10 @@ public class HighlightVisitorImpl extends JavaElementVisitor implements Highligh
       highlightReferencedMethodOrClassName(ref, resolved);
     }
 
+    if (parent instanceof PsiNewExpression && !(resolved instanceof PsiClass) && resolved instanceof PsiNamedElement && ((PsiNewExpression)parent).getClassOrAnonymousClassReference() == ref) {
+       myHolder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(ref)
+                      .descriptionAndTooltip("Cannot find symbol " + ((PsiNamedElement)resolved).getName()).create());
+    }
     if (!myHolder.hasErrorResults() && resolved instanceof PsiClass) {
       final PsiClass aClass = ((PsiClass)resolved).getContainingClass();
       if (aClass != null) {
@@ -963,6 +990,14 @@ public class HighlightVisitorImpl extends JavaElementVisitor implements Highligh
         }
         if (PsiTreeUtil.isAncestor(aClass, place, false) && aClass.hasTypeParameters()) {
           myHolder.add(HighlightClassUtil.checkCreateInnerClassFromStaticContext(ref, place, (PsiClass)resolved));
+        }
+      } else if (resolved instanceof PsiTypeParameter) {
+        final PsiTypeParameterListOwner owner = ((PsiTypeParameter)resolved).getOwner();
+        if (owner instanceof PsiClass) {
+          final PsiClass outerClass = (PsiClass)owner;
+          if (!HighlightClassUtil.hasEnclosingInstanceInScope(outerClass, ref, true, false)) {
+            myHolder.add(HighlightClassUtil.reportIllegalEnclosingUsage(ref, aClass, (PsiClass)owner, ref));
+          }
         }
       }
     }

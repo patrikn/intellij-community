@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,17 +76,17 @@ public class HgStatusWidget extends EditorBasedWidget implements StatusBarWidget
   }
 
   @Override
-  public void selectionChanged(FileEditorManagerEvent event) {
+  public void selectionChanged(@NotNull FileEditorManagerEvent event) {
     update();
   }
 
   @Override
-  public void fileOpened(FileEditorManager source, VirtualFile file) {
+  public void fileOpened(@NotNull FileEditorManager source, @NotNull VirtualFile file) {
     update();
   }
 
   @Override
-  public void fileClosed(FileEditorManager source, VirtualFile file) {
+  public void fileClosed(@NotNull FileEditorManager source, @NotNull VirtualFile file) {
     update();
   }
 
@@ -104,6 +104,7 @@ public class HgStatusWidget extends EditorBasedWidget implements StatusBarWidget
 
   @NotNull
   @Override
+  @Deprecated
   public String getMaxPossibleText() {
     return MAX_STRING;
   }
@@ -146,7 +147,7 @@ public class HgStatusWidget extends EditorBasedWidget implements StatusBarWidget
 
         int maxLength = MAX_STRING.length();
         myText = StringUtil.shortenTextWithEllipsis(myText, maxLength, 5);
-        if (!isDisposed()) {
+        if (!isDisposed() && myStatusBar != null) {
           myStatusBar.updateWidget(ID());
         }
       }

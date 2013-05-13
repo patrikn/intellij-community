@@ -217,7 +217,7 @@ public class LookupImpl extends LightweightHint implements LookupEx, Disposable 
 
     addListeners();
 
-    mySortingLabel.setBorder(new LineBorder(new JBColor(Color.LIGHT_GRAY, JBColor.background)));
+    mySortingLabel.setBorder(new LineBorder(new JBColor(Color.LIGHT_GRAY, JBColor.background())));
     mySortingLabel.setOpaque(true);
     new ChangeLookupSorting().installOn(mySortingLabel);
     updateSorting();
@@ -267,10 +267,14 @@ public class LookupImpl extends LightweightHint implements LookupEx, Disposable 
   }
 
   public void setFocused(boolean focused) {
-    if (focused && !CompletionPreview.hasPreview(this)) {
+    if (focused && !isSemiFocused()) {
       CompletionPreview.installPreview(this);
     }
     myFocused = focused;
+  }
+
+  public boolean isSemiFocused() {
+    return CompletionPreview.hasPreview(this);
   }
 
   public boolean isCalculating() {
@@ -867,16 +871,16 @@ public class LookupImpl extends LightweightHint implements LookupEx, Disposable 
         myHintAlarm.cancelAllRequests();
 
         final LookupElement item = getCurrentItem();
-        if (oldItem != item) {
+        if (oldItem != item && !myList.isEmpty()) { // do not update on temporary model wipe
           fireCurrentItemChanged(item);
           if (myDisposed) { //a listener may have decided to close us, what can we do?
             return;
           }
+          oldItem = item;
         }
         if (item != null) {
           updateHint(item);
         }
-        oldItem = item;
       }
     });
 

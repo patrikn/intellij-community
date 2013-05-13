@@ -48,19 +48,22 @@ import java.util.*;
 public class RedundantSuppressInspection extends GlobalInspectionTool{
   private BidirectionalMap<String, QuickFix> myQuickFixes = null;
   private static final Logger LOG = Logger.getInstance("#com.intellij.codeInspection.RedundantSuppressInspection");
-  
+
   public boolean IGNORE_ALL = false;
 
+  @Override
   @NotNull
   public String getGroupDisplayName() {
     return GroupNames.DECLARATION_REDUNDANCY;
   }
 
+  @Override
   @NotNull
   public String getDisplayName() {
     return InspectionsBundle.message("inspection.redundant.suppression.name");
   }
 
+  @Override
   @NotNull
   @NonNls
   public String getShortName() {
@@ -73,18 +76,19 @@ public class RedundantSuppressInspection extends GlobalInspectionTool{
   }
 
   @Override
-  public void writeSettings(Element node) throws WriteExternalException {
+  public void writeSettings(@NotNull Element node) throws WriteExternalException {
     if (IGNORE_ALL) {
       super.writeSettings(node);
     }
   }
 
+  @Override
   public void runInspection(final AnalysisScope scope,
                             final InspectionManager manager,
                             final GlobalInspectionContext globalContext,
                             final ProblemDescriptionsProcessor problemDescriptionsProcessor) {
     globalContext.getRefManager().iterate(new RefJavaVisitor() {
-      @Override public void visitClass(RefClass refClass) {
+      @Override public void visitClass(@NotNull RefClass refClass) {
         if (!globalContext.shouldCheck(refClass, RedundantSuppressInspection.this)) return;
         CommonProblemDescriptor[] descriptors = checkElement(refClass, manager, globalContext.getProject());
         if (descriptors != null) {
@@ -289,12 +293,14 @@ public class RedundantSuppressInspection extends GlobalInspectionTool{
   }
 
 
+  @Override
   @Nullable
   public QuickFix getQuickFix(final String hint) {
     return myQuickFixes != null ? myQuickFixes.get(hint) : new RemoveSuppressWarningAction(hint);
   }
 
 
+  @Override
   @Nullable
   public String getHint(final QuickFix fix) {
     if (myQuickFixes != null) {
@@ -307,6 +313,7 @@ public class RedundantSuppressInspection extends GlobalInspectionTool{
     return null;
   }
 
+  @Override
   public boolean isEnabledByDefault() {
     return false;
   }

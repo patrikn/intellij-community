@@ -48,7 +48,7 @@ public class LightAdvHighlightingJdk7Test extends LightDaemonAnalyzerTestCase {
   @NonNls static final String BASE_PATH = "/codeInsight/daemonCodeAnalyzer/advHighlighting7";
 
   private void doTest(boolean checkWarnings, boolean checkInfos, Class<?>... classes) {
-    setLanguageLevel(LanguageLevel.JDK_1_7); 
+    setLanguageLevel(LanguageLevel.JDK_1_7);
     ((JavaVersionServiceImpl)JavaVersionService.getInstance()).setTestVersion(JavaSdkVersion.JDK_1_7, myTestRootDisposable);
     enableInspectionTools(classes);
     doTest(BASE_PATH + "/" + getTestName(false) + ".java", checkWarnings, checkInfos);
@@ -131,7 +131,7 @@ public class LightAdvHighlightingJdk7Test extends LightDaemonAnalyzerTestCase {
 
       infos = doHighlighting(HighlightSeverity.WARNING);
       HighlightInfo info = assertOneElement(infos);
-      assertEquals("Class 'WithMain' is never used", info.description);
+      assertEquals("Class 'WithMain' is never used", info.getDescription());
     }
     finally {
       point.unregisterExtension(extension);
@@ -170,6 +170,14 @@ public class LightAdvHighlightingJdk7Test extends LightDaemonAnalyzerTestCase {
   public void testWrongArgsAndUnknownTypeParams() { doTest(false, false); }
   public void testAmbiguousMethodCallIDEA97983() { doTest(false, false); }
   public void testAmbiguousMethodCallIDEA100314() { doTest(false, false); }
+  public void testAmbiguousMethodCallIDEA67668() { doTest(false, false); }
+  public void testAmbiguousMethodCallIDEA67671() { doTest(false, false); }
+  public void testAmbiguousMethodCallIDEA67669() { doTest(false, false); }
   public void testInstanceMemberNotAccessibleInStaticContext() { doTest(false, false); }
   public void testRejectedTypeParamsForConstructor() { doTest(false, false); }
+  public void testAnnotationArgs() throws Exception { doTest(false, false);}
+  public void testIDEA70890() { doTest(false, false); }
+  public void testIDEA63731() { doTest(false, false); }
+  public void testIDEA62056() { doTest(false, false); }
+  public void testIDEA78916() { doTest(false, false); }
 }

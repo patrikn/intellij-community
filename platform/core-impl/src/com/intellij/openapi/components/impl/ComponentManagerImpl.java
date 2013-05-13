@@ -41,8 +41,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 import org.picocontainer.*;
-import org.picocontainer.defaults.*;
 import org.picocontainer.defaults.CachingComponentAdapter;
+import org.picocontainer.defaults.ConstructorInjectionComponentAdapter;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
@@ -78,7 +78,11 @@ public abstract class ComponentManagerImpl extends UserDataHolderBase implements
 
   protected ComponentManagerImpl(ComponentManager parentComponentManager) {
     myParentComponentManager = parentComponentManager;
-    bootstrapPicoContainer();
+    bootstrapPicoContainer(toString());
+  }
+  protected ComponentManagerImpl(ComponentManager parentComponentManager, @NotNull String name) {
+    myParentComponentManager = parentComponentManager;
+    bootstrapPicoContainer(name);
   }
 
   //todo[mike] there are several init* methods. Make it just 1
@@ -260,6 +264,13 @@ public abstract class ComponentManagerImpl extends UserDataHolderBase implements
     myInitializedComponents.remove(componentKey);
   }
 
+  @TestOnly
+  public synchronized <T> T registerComponentInstance(Class<T> componentKey, T componentImplementation) {
+    getPicoContainer().unregisterComponent(componentKey.getName());
+    getPicoContainer().registerComponentInstance(componentKey.getName(), componentImplementation);
+    return (T)myInitializedComponents.remove(componentKey);
+  }
+
   @Override
   public synchronized boolean hasComponent(@NotNull Class interfaceClass) {
     return myComponentsRegistry.containsInterface(interfaceClass);
@@ -299,7 +310,7 @@ public abstract class ComponentManagerImpl extends UserDataHolderBase implements
     else {
       result = new IdeaPicoContainer();
     }
-    
+
     return result;
   }
 
@@ -351,19 +362,12 @@ public abstract class ComponentManagerImpl extends UserDataHolderBase implements
     myConfigurator.loadComponentsConfiguration(components, descriptor, defaultProject);
   }
 
-  protected void bootstrapPicoContainer() {
+  protected void bootstrapPicoContainer(@NotNull String name) {
     myPicoContainer = createPicoContainer();
 
-    myMessageBus = MessageBusFactory.newMessageBus(this, myParentComponentManager == null ? null : myParentComponentManager.getMessageBus());
+    myMessageBus = MessageBusFactory.newMessageBus(name, myParentComponentManager == null ? null : myParentComponentManager.getMessageBus());
     final MutablePicoContainer picoContainer = getPicoContainer();
     picoContainer.registerComponentInstance(MessageBus.class, myMessageBus);
-    /*
-    picoContainer.registerComponentInstance(ExtensionInitializer.class, new ExtensionInitializer() {
-      public void initExtension(final Object extension) {
-        getComponentStore().initComponent(extension);
-      }
-    });
-    */
   }
 
 
@@ -405,6 +409,7 @@ public abstract class ComponentManagerImpl extends UserDataHolderBase implements
     return myDisposedCondition;
   }
 
+  @NotNull
   public static String getComponentName(@NotNull final Object component) {
     if (component instanceof NamedComponent) {
       return ((NamedComponent)component).getComponentName();

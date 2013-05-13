@@ -146,7 +146,10 @@ public abstract class BaseExternalAnnotationsManager extends ExternalAnnotations
 
   private static final List<AnnotationData> NO_DATA = new ArrayList<AnnotationData>(1);
   private final ConcurrentMostlySingularMultiMap<PsiModifierListOwner, AnnotationData> cache = new ConcurrentMostlySingularMultiMap<PsiModifierListOwner, AnnotationData>();
+
+  // interner for storing annotation FQN
   private final CharTableImpl charTable = new CharTableImpl();
+
   @NotNull
   private List<AnnotationData> collectExternalAnnotations(@NotNull PsiModifierListOwner listOwner) {
     if (!hasAnyAnnotationsRoots()) return Collections.emptyList();
@@ -278,7 +281,9 @@ public abstract class BaseExternalAnnotationsManager extends ExternalAnnotations
 
   @NotNull
   private String intern(@NotNull String annotationFQN) {
-    return charTable.doIntern(annotationFQN).toString();
+    synchronized (charTable) {
+      return charTable.doIntern(annotationFQN).toString();
+    }
   }
 
   @NotNull
@@ -298,28 +303,9 @@ public abstract class BaseExternalAnnotationsManager extends ExternalAnnotations
 
       MostlySingularMultiMap<String, AnnotationData> fileData = getDataFromFile(file);
 
-      Iterable<AnnotationData> data = fileData.get(externalName);
-      for (AnnotationData ad : data) {
-        if (result.contains(ad)) {
-          // there can be compatible annotations in different files
-          if (Comparing.equal(ad.virtualFile, file.getVirtualFile())) {
-            LOG.error("Duplicate signature:\n" + externalName + "; in  " + file);
-          }
-        }
-        else {
-          result.add(ad);
-        }
-      }
+      addAnnotations(result, externalName, file, fileData);
       if (oldExternalName != null && !externalName.equals(oldExternalName)) {
-        Iterable<AnnotationData> oldCollection = fileData.get(oldExternalName);
-        for (AnnotationData ad : oldCollection) {
-          if (result.contains(ad)) {
-            LOG.error("Duplicate signature o:\n" + oldExternalName + "; in  " + toVirtualFiles(files));
-          }
-          else {
-            result.add(ad);
-          }
-        }
+        addAnnotations(result, oldExternalName, file, fileData);
       }
     }
     if (result.isEmpty()) {
@@ -329,13 +315,22 @@ public abstract class BaseExternalAnnotationsManager extends ExternalAnnotations
     return result;
   }
 
-  static List<VirtualFile> toVirtualFiles(List<PsiFile> files) {
-    return ContainerUtil.map(files, new Function<PsiFile, VirtualFile>() {
-      @Override
-      public VirtualFile fun(PsiFile file) {
-        return file.getVirtualFile();
+  private static void addAnnotations(@NotNull List<AnnotationData> result,
+                                     @NotNull String externalName,
+                                     @NotNull PsiFile file,
+                                     @NotNull MostlySingularMultiMap<String, AnnotationData> fileData) {
+    Iterable<AnnotationData> data = fileData.get(externalName);
+    for (AnnotationData ad : data) {
+      if (result.contains(ad)) {
+        // there can be compatible annotations in different files
+        if (Comparing.equal(ad.virtualFile, file.getVirtualFile())) {
+          LOG.error("Duplicate signature: '" + externalName + "'; in  " + file.getVirtualFile());
+        }
       }
-    });
+      else {
+        result.add(ad);
+      }
+    }
   }
 
   @Override
@@ -509,12 +504,15 @@ public abstract class BaseExternalAnnotationsManager extends ExternalAnnotations
 
   @NotNull
   private PsiAnnotation createAnnotationFromText(@NotNull final String text) throws IncorrectOperationException {
-    final DummyHolder holder = DummyHolderFactory.createHolder(myPsiManager, new JavaDummyElement(text, ANNOTATION, LanguageLevel.HIGHEST), null, charTable);
-    final PsiElement element = SourceTreeToPsiMap.treeElementToPsi(holder.getTreeElement().getFirstChildNode());
-    if (!(element instanceof PsiAnnotation)) {
-      throw new IncorrectOperationException("Incorrect annotation \"" + text + "\".");
+    // synchronize during interning in charTable
+    synchronized (charTable) {
+      final DummyHolder holder = DummyHolderFactory.createHolder(myPsiManager, new JavaDummyElement(text, ANNOTATION, LanguageLevel.HIGHEST), null, charTable);
+      final PsiElement element = SourceTreeToPsiMap.treeElementToPsi(holder.getTreeElement().getFirstChildNode());
+      if (!(element instanceof PsiAnnotation)) {
+        throw new IncorrectOperationException("Incorrect annotation \"" + text + "\".");
+      }
+      return (PsiAnnotation)element;
     }
-    return (PsiAnnotation)element;
   }
   private static final JavaParserUtil.ParserWrapper ANNOTATION = new JavaParserUtil.ParserWrapper() {
     @Override

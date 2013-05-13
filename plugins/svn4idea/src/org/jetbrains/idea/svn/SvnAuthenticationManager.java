@@ -41,6 +41,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.svn.auth.ProviderType;
 import org.jetbrains.idea.svn.auth.SvnAuthenticationInteraction;
 import org.jetbrains.idea.svn.auth.SvnAuthenticationListener;
+import org.jetbrains.idea.svn.config.ProxyGroup;
 import org.jetbrains.idea.svn.config.SvnServerFileKeys;
 import org.tmatesoft.svn.core.SVNErrorMessage;
 import org.tmatesoft.svn.core.SVNException;
@@ -64,6 +65,10 @@ public class SvnAuthenticationManager extends DefaultSVNAuthenticationManager im
   public static final String SVN_SSH = "svn+ssh";
   public static final String HTTP = "http";
   public static final String HTTPS = "https";
+  public static final String HTTP_PROXY_HOST = "http-proxy-host";
+  public static final String HTTP_PROXY_PORT = "http-proxy-port";
+  public static final String HTTP_PROXY_USERNAME = "http-proxy-username";
+  public static final String HTTP_PROXY_PASSWORD = "http-proxy-password";
   private Project myProject;
   private File myConfigDirectory;
   private PersistentAuthenticationProviderProxy myPersistentAuthenticationProviderProxy;
@@ -494,17 +499,23 @@ public class SvnAuthenticationManager extends DefaultSVNAuthenticationManager im
 
   public ISVNProxyManager getProxyManager(SVNURL url) throws SVNException {
     SSLExceptionsHelper.addInfo("Accessing URL: " + url.toString());
-    CommonProxy.getInstance().noProxy(url.getProtocol(), url.getHost(), url.getPort());
     ourThreadLocalProvider.set(myProvider);
+    // in proxy creation, we need proxy information from common proxy. but then we should forbid common proxy to intercept
+    final ISVNProxyManager proxy = createProxy(url);
+    CommonProxy.getInstance().noProxy(url.getProtocol(), url.getHost(), url.getPort());
+    return proxy;
+  }
+
+  private ISVNProxyManager createProxy(SVNURL url) {
     // this code taken from default manager (changed for system properties reading)
     String host = url.getHost();
 
-    String proxyHost = getServersPropertyIdea(host, "http-proxy-host");
+    String proxyHost = getServersPropertyIdea(host, HTTP_PROXY_HOST);
     if ((proxyHost == null) || "".equals(proxyHost.trim())) {
       if (getConfig().isIsUseDefaultProxy()) {
         // ! use common proxy if it is set
         try {
-          final List<Proxy> proxies = CommonProxy.getInstance().select(new URI(url.toString()));
+          final List<Proxy> proxies = HttpConfigurable.getInstance().getOnlyBySettingsSelector().select(new URI(url.toString()));
           if (proxies != null && ! proxies.isEmpty()) {
             for (Proxy proxy : proxies) {
               if (HttpConfigurable.isRealProxy(proxy) && Proxy.Type.HTTP.equals(proxy.type())) {
@@ -523,26 +534,25 @@ public class SvnAuthenticationManager extends DefaultSVNAuthenticationManager im
       }
       return null;
     }
-      String proxyExceptions = getServersPropertyIdea(host, "http-proxy-exceptions");
-      String proxyExceptionsSeparator = ",";
-      if (proxyExceptions == null) {
-          proxyExceptions = System.getProperty("http.nonProxyHosts");
-          proxyExceptionsSeparator = "|";
+    String proxyExceptions = getServersPropertyIdea(host, "http-proxy-exceptions");
+    String proxyExceptionsSeparator = ",";
+    if (proxyExceptions == null) {
+        proxyExceptions = System.getProperty("http.nonProxyHosts");
+        proxyExceptionsSeparator = "|";
+    }
+    if (proxyExceptions != null) {
+      for(StringTokenizer exceptions = new StringTokenizer(proxyExceptions, proxyExceptionsSeparator); exceptions.hasMoreTokens();) {
+          String exception = exceptions.nextToken().trim();
+          if (DefaultSVNOptions.matches(exception, host)) {
+              return null;
+          }
       }
-      if (proxyExceptions != null) {
-        for(StringTokenizer exceptions = new StringTokenizer(proxyExceptions, proxyExceptionsSeparator); exceptions.hasMoreTokens();) {
-            String exception = exceptions.nextToken().trim();
-            if (DefaultSVNOptions.matches(exception, host)) {
-                return null;
-            }
-        }
-      }
-      String proxyPort = getServersPropertyIdea(host, "http-proxy-port");
-      String proxyUser = getServersPropertyIdea(host, "http-proxy-username");
-      String proxyPassword = getServersPropertyIdea(host, "http-proxy-password");
-      return new MySimpleProxyManager(proxyHost, proxyPort, proxyUser, proxyPassword);
+    }
+    String proxyPort = getServersPropertyIdea(host, HTTP_PROXY_PORT);
+    String proxyUser = getServersPropertyIdea(host, HTTP_PROXY_USERNAME);
+    String proxyPassword = getServersPropertyIdea(host, HTTP_PROXY_PASSWORD);
+    return new MySimpleProxyManager(proxyHost, proxyPort, proxyUser, proxyPassword);
   }
-
 
 
   private static class MyPromptingProxyManager extends MySimpleProxyManager {
@@ -707,19 +717,33 @@ public class SvnAuthenticationManager extends DefaultSVNAuthenticationManager im
     return false;
   }
 
+  @Nullable
+  public static String getGroupForHost(final String host, final IdeaSVNConfigFile serversFile) {
+    final Map<String,ProxyGroup> groups = serversFile.getAllGroups();
+    for (Map.Entry<String, ProxyGroup> entry : groups.entrySet()) {
+      if (matchesGroupPattern(host, entry.getValue().getPatterns())) return entry.getKey();
+    }
+    return null;
+  }
+
   // taken from default manager as is
   private static String getGroupName(Map groups, String host) {
-      for (Iterator names = groups.keySet().iterator(); names.hasNext();) {
-          String name = (String) names.next();
-          String pattern = (String) groups.get(name);
-          for(StringTokenizer tokens = new StringTokenizer(pattern, ","); tokens.hasMoreTokens();) {
-              String token = tokens.nextToken();
-              if (DefaultSVNOptions.matches(token, host)) {
-                  return name;
-              }
-          }
-      }
+    for (Object o : groups.keySet()) {
+      final String name = (String) o;
+      final String pattern = (String) groups.get(name);
+      if (matchesGroupPattern(host, pattern)) return name;
+    }
       return null;
+  }
+
+  private static boolean matchesGroupPattern(String host, String pattern) {
+    for(StringTokenizer tokens = new StringTokenizer(pattern, ","); tokens.hasMoreTokens();) {
+        String token = tokens.nextToken();
+        if (DefaultSVNOptions.matches(token, host)) {
+          return true;
+        }
+    }
+    return false;
   }
 
   // default = yes

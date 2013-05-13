@@ -200,28 +200,6 @@ public class DockManagerImpl extends DockManager implements PersistentStateCompo
     return myBusyObject.getReady(this);
   }
 
-  @Override
-  public void projectOpened() {
-  }
-
-  @Override
-  public void projectClosed() {
-  }
-
-  @NotNull
-  @Override
-  public String getComponentName() {
-    return "DockManager";
-  }
-
-  @Override
-  public void initComponent() {
-  }
-
-  @Override
-  public void disposeComponent() {
-  }
-
   private class MyDragSession implements DragSession {
 
     private final JWindow myWindow;
@@ -513,8 +491,9 @@ public class DockManagerImpl extends DockManager implements PersistentStateCompo
     }
 
     private void updateNorthPanel() {
-      myNorthPanel.setVisible(UISettings.getInstance().SHOW_NAVIGATION_BAR &&
-                              !(myContainer instanceof DockContainer.Dialog));
+      myNorthPanel.setVisible(UISettings.getInstance().SHOW_NAVIGATION_BAR
+                              && !(myContainer instanceof DockContainer.Dialog)
+                              && !UISettings.getInstance().PRESENTATION_MODE);
 
       IdeRootPaneNorthExtension[] extensions =
         Extensions.getArea(myProject).getExtensionPoint(IdeRootPaneNorthExtension.EP_NAME).getExtensions();

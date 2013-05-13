@@ -651,6 +651,7 @@ public class VirtualDirectoryImpl extends VirtualFileSystemEntry {
 
   private void removeFromArray(int index) {
     myChildren = ArrayUtil.remove(myChildren, index, new ArrayFactory<VirtualFileSystemEntry>() {
+      @NotNull
       @Override
       public VirtualFileSystemEntry[] create(int count) {
         return new VirtualFileSystemEntry[count];
@@ -658,7 +659,7 @@ public class VirtualDirectoryImpl extends VirtualFileSystemEntry {
     });
   }
 
-  private static final int CHILDREN_CACHED = 0x08;
+  private static final int CHILDREN_CACHED = 0x08000000;
   public synchronized boolean allChildrenLoaded() {
     return getFlag(CHILDREN_CACHED);
   }

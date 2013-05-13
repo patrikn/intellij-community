@@ -53,6 +53,7 @@ public class EditorSettingsExternalizable implements NamedJDOMExternalizable, Ex
     public boolean IS_ENSURE_NEWLINE_AT_EOF = false;
     public boolean SHOW_QUICK_DOC_ON_MOUSE_OVER_ELEMENT = false;
     public long QUICK_DOC_ON_MOUSE_OVER_DELAY_MS = 500;
+    public boolean SHOW_INTENTION_BULB = true;
     public boolean IS_CARET_BLINKING = true;
     public int CARET_BLINKING_PERIOD = 500;
     public boolean IS_RIGHT_MARGIN_SHOWN = true;
@@ -148,7 +149,7 @@ public class EditorSettingsExternalizable implements NamedJDOMExternalizable, Ex
   public void writeExternal(Element element) throws WriteExternalException {
     DefaultJDOMExternalizer.writeExternal(myOptions, element, new DefaultJDOMExternalizer.JDOMFilter() {
       @Override
-      public boolean isAccept(final Field field) {
+      public boolean isAccept(@NotNull final Field field) {
         return !field.getName().equals("IS_NATIVE2ASCII_FOR_PROPERTIES_FILES") && !field.getName().equals("DEFAULT_PROPERTIES_FILES_CHARSET_NAME");
       }
     });
@@ -278,7 +279,7 @@ public class EditorSettingsExternalizable implements NamedJDOMExternalizable, Ex
     if (myPlacesToUseSoftWraps.contains(place)) {
       return true;
     }
-    
+
     // For now use soft wraps at vcs diff if they are enabled for the main editors.
     if (place == SoftWrapAppliancePlaces.VCS_DIFF) {
       return myPlacesToUseSoftWraps.contains(SoftWrapAppliancePlaces.MAIN_EDITOR);
@@ -391,6 +392,14 @@ public class EditorSettingsExternalizable implements NamedJDOMExternalizable, Ex
       ));
     }
     myOptions.QUICK_DOC_ON_MOUSE_OVER_DELAY_MS = delay;
+  }
+
+  public boolean isShowIntentionBulb() {
+    return myOptions.SHOW_INTENTION_BULB;
+  }
+
+  public void setShowIntentionBulb(boolean show) {
+    myOptions.SHOW_INTENTION_BULB = show;
   }
 
   public boolean isRefrainFromScrolling() {

@@ -356,7 +356,7 @@ public class IdeTooltipManager implements ApplicationComponent, AWTEventListener
   @SuppressWarnings({"MethodMayBeStatic", "UnusedParameters"})
   public String getUlImg(boolean awtTooltip) {
     AllIcons.General.Mdot.getIconWidth();  // keep icon reference
-    return "/general/mdot.png";
+    return UIUtil.isUnderDarcula() ? "/general/mdot-white.png" : "/general/mdot.png";
   }
 
   @SuppressWarnings({"MethodMayBeStatic", "UnusedParameters"})
@@ -600,7 +600,7 @@ public class IdeTooltipManager implements ApplicationComponent, AWTEventListener
   }
 
   public static void setColors(JComponent pane) {
-    pane.setForeground(JBColor.foreground);
+    pane.setForeground(JBColor.foreground());
     pane.setBackground(HintUtil.INFORMATION_COLOR);
     pane.setOpaque(true);
   }

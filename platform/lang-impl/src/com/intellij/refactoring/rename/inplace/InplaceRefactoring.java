@@ -138,9 +138,11 @@ public abstract class InplaceRefactoring {
     if (myElementToRename != null) {
       myInitialName = initialName;
       final PsiFile containingFile = myElementToRename.getContainingFile();
-      if (!notSameFile(getTopLevelVirtualFile(containingFile.getViewProvider()), containingFile)) {
-        myRenameOffset = myElementToRename != null && myElementToRename.getTextRange() != null ? myEditor.getDocument()
-          .createRangeMarker(myElementToRename.getTextRange()) : null;
+      if (!notSameFile(getTopLevelVirtualFile(containingFile.getViewProvider()), containingFile) &&
+          myElementToRename != null && myElementToRename.getTextRange() != null) {
+        myRenameOffset = myEditor.getDocument().createRangeMarker(myElementToRename.getTextRange());
+        myRenameOffset.setGreedyToRight(true);
+        myRenameOffset.setGreedyToLeft(true); // todo not sure if we need this
       }
     }
   }
@@ -234,8 +236,8 @@ public abstract class InplaceRefactoring {
 
   protected abstract boolean shouldSelectAll();
 
-  protected MyLookupExpression createLookupExpression() {
-    return new MyLookupExpression(getInitialName(), myNameSuggestions, myElementToRename, shouldSelectAll(), myAdvertisementText);
+  protected MyLookupExpression createLookupExpression(PsiElement selectedElement) {
+    return new MyLookupExpression(getInitialName(), myNameSuggestions, myElementToRename, selectedElement, shouldSelectAll(), myAdvertisementText);
   }
 
   protected boolean acceptReference(PsiReference reference) {
@@ -269,15 +271,22 @@ public abstract class InplaceRefactoring {
     PsiElement selectedElement = getSelectedInEditorElement(nameIdentifier, refs, stringUsages, offset);
 
     boolean subrefOnPrimaryElement = false;
+    boolean hasReferenceOnNameIdentifier = false;
     for (PsiReference ref : refs) {
-      if (isReferenceAtCaret(nameIdentifier, ref)) {
-        builder.replaceElement(ref, PRIMARY_VARIABLE_NAME, createLookupExpression(), true);
+      if (isReferenceAtCaret(selectedElement, ref)) {
+        builder.replaceElement(ref, PRIMARY_VARIABLE_NAME, createLookupExpression(selectedElement), true);
         subrefOnPrimaryElement = true;
         continue;
       }
       addVariable(ref, selectedElement, builder, offset);
+      hasReferenceOnNameIdentifier |= isReferenceAtCaret(nameIdentifier, ref);
     }
-    if (nameIdentifier != null && !subrefOnPrimaryElement) addVariable(nameIdentifier, selectedElement, builder);
+    if (nameIdentifier != null) {
+      hasReferenceOnNameIdentifier |= selectedElement.getTextRange().contains(nameIdentifier.getTextRange());
+      if (!subrefOnPrimaryElement || !hasReferenceOnNameIdentifier){
+        addVariable(nameIdentifier, selectedElement, builder);
+      }
+    }
     for (Pair<PsiElement, TextRange> usage : stringUsages) {
       addVariable(usage.first, usage.second, selectedElement, builder);
     }
@@ -327,8 +336,9 @@ public abstract class InplaceRefactoring {
     return true;
   }
 
-  protected boolean isReferenceAtCaret(PsiElement nameIdentifier, PsiReference ref) {
-    return nameIdentifier != null && ref.getElement() == nameIdentifier.getParent();
+  protected boolean isReferenceAtCaret(PsiElement selectedElement, PsiReference ref) {
+    final TextRange textRange = ref.getRangeInElement().shiftRight(ref.getElement().getTextRange().getStartOffset());
+    return selectedElement != null && selectedElement.getTextRange().contains(textRange);
   }
 
   protected void beforeTemplateStart() {
@@ -393,6 +403,7 @@ public abstract class InplaceRefactoring {
   private void restoreOldCaretPositionAndSelection(final int offset) {
     //move to old offset
     Runnable runnable = new Runnable() {
+      @Override
       public void run() {
         myEditor.getCaretModel().moveToOffset(restoreCaretOffset(offset));
         restoreSelection();
@@ -475,15 +486,18 @@ public abstract class InplaceRefactoring {
 
   @Nullable
   protected PsiNamedElement getVariable() {
+    // todo we can use more specific class, shouldn't we?
+    //Class clazz = myElementToRename != null? myElementToRename.getClass() : PsiNameIdentifierOwner.class; 
     if (myElementToRename != null && myElementToRename.isValid()) {
       if (Comparing.strEqual(myOldName, myElementToRename.getName())) return myElementToRename;
-      if (myRenameOffset != null) return PsiTreeUtil.getParentOfType(myElementToRename.getContainingFile().findElementAt(myRenameOffset.getStartOffset()), PsiNameIdentifierOwner.class);
+      if (myRenameOffset != null) return PsiTreeUtil.findElementOfClassAtRange(
+        myElementToRename.getContainingFile(), myRenameOffset.getStartOffset(), myRenameOffset.getEndOffset(), PsiNameIdentifierOwner.class);
     }
 
     if (myRenameOffset != null) {
       final PsiFile psiFile = PsiDocumentManager.getInstance(myProject).getPsiFile(myEditor.getDocument());
       if (psiFile != null) {
-        return PsiTreeUtil.getParentOfType(psiFile.findElementAt(myRenameOffset.getStartOffset()), PsiNameIdentifierOwner.class);
+        return PsiTreeUtil.findElementOfClassAtRange(psiFile, myRenameOffset.getStartOffset(), myRenameOffset.getEndOffset(), PsiNameIdentifierOwner.class);
       }
     }
     return myElementToRename;
@@ -536,9 +550,11 @@ public abstract class InplaceRefactoring {
   protected void revertState() {
     if (myOldName == null) return;
     CommandProcessor.getInstance().executeCommand(myProject, new Runnable() {
+      @Override
       public void run() {
         final Editor topLevelEditor = InjectedLanguageUtil.getTopLevelEditor(myEditor);
         ApplicationManager.getApplication().runWriteAction(new Runnable() {
+          @Override
           public void run() {
             final TemplateState state = TemplateManagerImpl.getTemplateState(topLevelEditor);
             assert state != null;
@@ -608,9 +624,9 @@ public abstract class InplaceRefactoring {
                            final PsiElement selectedElement,
                            final TemplateBuilderImpl builder,
                            int offset) {
-    if (reference.getElement() == selectedElement &&
-        contains(reference.getRangeInElement().shiftRight(selectedElement.getTextRange().getStartOffset()), offset)) {
-      builder.replaceElement(reference, PRIMARY_VARIABLE_NAME, createLookupExpression(), true);
+    final PsiElement element = reference.getElement();
+    if (element == selectedElement && checkRangeContainsOffset(offset, reference.getRangeInElement(), element)) {
+      builder.replaceElement(reference, PRIMARY_VARIABLE_NAME, createLookupExpression(selectedElement), true);
     }
     else {
       builder.replaceElement(reference, OTHER_VARIABLE_NAME, PRIMARY_VARIABLE_NAME, false);
@@ -628,7 +644,7 @@ public abstract class InplaceRefactoring {
                            final PsiElement selectedElement,
                            final TemplateBuilderImpl builder) {
     if (element == selectedElement) {
-      builder.replaceElement(element, PRIMARY_VARIABLE_NAME, createLookupExpression(), true);
+      builder.replaceElement(element, PRIMARY_VARIABLE_NAME, createLookupExpression(myElementToRename), true);
     }
     else if (textRange != null) {
       builder.replaceElement(element, textRange, OTHER_VARIABLE_NAME, PRIMARY_VARIABLE_NAME, false);
@@ -668,27 +684,37 @@ public abstract class InplaceRefactoring {
                                                 final Collection<PsiReference> refs,
                                                 Collection<Pair<PsiElement, TextRange>> stringUsages,
                                                 final int offset) {
-    if (nameIdentifier != null) {
-      final TextRange range = nameIdentifier.getTextRange();
-      if (range != null && contains(range, offset)) return nameIdentifier;
-    }
-
+    //prefer reference in case of self-references
     for (PsiReference ref : refs) {
       final PsiElement element = ref.getElement();
-      if (contains(ref.getRangeInElement().shiftRight(element.getTextRange().getStartOffset()), offset)) return element;
+      if (checkRangeContainsOffset(offset, ref.getRangeInElement(), element)) return element;
+    }
+
+    if (nameIdentifier != null) {
+      final TextRange range = nameIdentifier.getTextRange();
+      if (range != null && range.containsOffset(offset)) return nameIdentifier;
     }
 
     for (Pair<PsiElement, TextRange> stringUsage : stringUsages) {
-      final PsiElement element = stringUsage.first;
-      if (contains(stringUsage.second.shiftRight(element.getTextRange().getStartOffset()), offset)) return element;
+      if (checkRangeContainsOffset(offset, stringUsage.second, stringUsage.first)) return stringUsage.first;
     }
 
     LOG.error(nameIdentifier + " by " + this.getClass().getName());
     return null;
   }
 
-  private static boolean contains(final TextRange range, final int offset) {
-    return range.getStartOffset() <= offset && offset <= range.getEndOffset();
+  private boolean checkRangeContainsOffset(int offset, final TextRange textRange, PsiElement element) {
+    int startOffset = element.getTextRange().getStartOffset();
+    final InjectedLanguageManager injectedLanguageManager = InjectedLanguageManager.getInstance(myProject);
+    final PsiLanguageInjectionHost injectionHost = injectedLanguageManager.getInjectionHost(element);
+    if (injectionHost != null) {
+      final PsiElement nameIdentifier = getNameIdentifier();
+      final PsiLanguageInjectionHost initialInjectedHost = nameIdentifier != null ? injectedLanguageManager.getInjectionHost(nameIdentifier) : null;
+      if (initialInjectedHost != null && initialInjectedHost != injectionHost) {
+        return false;
+      }
+    }
+    return textRange.shiftRight(startOffset).containsOffset(offset);
   }
 
   protected boolean isRestart() {
@@ -698,7 +724,7 @@ public abstract class InplaceRefactoring {
 
   public static boolean canStartAnotherRefactoring(Editor editor, Project project, RefactoringActionHandler handler, PsiElement... element) {
     final InplaceRefactoring inplaceRefactoring = getActiveInplaceRenamer(editor);
-    return StartMarkAction.canStart(project) == null || 
+    return StartMarkAction.canStart(project) == null ||
            (inplaceRefactoring != null && element.length == 1 && inplaceRefactoring.startsOnTheSameElement(handler, element[0]));
   }
 
@@ -709,7 +735,7 @@ public abstract class InplaceRefactoring {
   protected boolean startsOnTheSameElement(RefactoringActionHandler handler, PsiElement element) {
     return getVariable() == element;
   }
-  
+
   protected void releaseResources() {
   }
 
@@ -763,6 +789,7 @@ public abstract class InplaceRefactoring {
 
     protected abstract void restoreDaemonUpdateState();
 
+    @Override
     public void beforeTemplateFinished(final TemplateState templateState, Template template) {
       try {
         final TextResult value = templateState.getVariableValue(PRIMARY_VARIABLE_NAME);
@@ -771,7 +798,7 @@ public abstract class InplaceRefactoring {
         TextRange range = templateState.getCurrentVariableRange();
         final int currentOffset = myEditor.getCaretModel().getOffset();
         if (range == null && myRenameOffset != null) {
-          range = new TextRange(myRenameOffset.getStartOffset(), myRenameOffset.getEndOffset());  
+          range = new TextRange(myRenameOffset.getStartOffset(), myRenameOffset.getEndOffset());
         }
         myBeforeRevert =
           range != null && range.getEndOffset() >= currentOffset && range.getStartOffset() <= currentOffset
@@ -812,6 +839,7 @@ public abstract class InplaceRefactoring {
       }
     }
 
+    @Override
     public void templateCancelled(Template template) {
       try {
         final PsiDocumentManager documentManager = PsiDocumentManager.getInstance(myProject);

@@ -45,9 +45,7 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.IdeFrame;
 import com.intellij.openapi.wm.ex.WindowManagerEx;
-import com.intellij.util.ArrayUtil;
-import com.intellij.util.Function;
-import com.intellij.util.PlatformUtils;
+import com.intellij.util.*;
 import com.intellij.util.graph.CachingSemiGraph;
 import com.intellij.util.graph.DFSTBuilder;
 import com.intellij.util.graph.Graph;
@@ -59,7 +57,6 @@ import org.jdom.Document;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import sun.reflect.Reflection;
 
 import javax.swing.*;
 import javax.swing.event.HyperlinkEvent;
@@ -76,9 +73,9 @@ import java.util.zip.ZipInputStream;
  */
 @SuppressWarnings({"UseOfSystemOutOrSystemErr", "CallToPrintStackTrace"}) // No logger is loaded at this time so we have to use these.
 public class PluginManager {
-
   @NonNls private static final String PROPERTY_PLUGIN_PATH = "plugin.path";
   @NonNls public static final String INSTALLED_TXT = "installed.txt";
+  @NonNls private static final String SPECIAL_IDEA_PLUGIN = "IDEA CORE";
   private static String myPluginError = null;
   private static List<String> myPlugins2Disable = null;
   private static LinkedHashSet<String> myPlugins2Enable = null;
@@ -117,6 +114,7 @@ public class PluginManager {
   }
 
   public static void initPlugins(@Nullable StartupProgress progress) {
+    PluginClassLoaderDetector.install();
     long start = System.currentTimeMillis();
     try {
       initializePlugins(progress);
@@ -131,19 +129,30 @@ public class PluginManager {
   }
 
   private static void logPlugins() {
-    List<String> loaded = new ArrayList<String>();
+    List<String> loadedBundled = new ArrayList<String>();
     List<String> disabled = new ArrayList<String>();
+    List<String> loadedCustom = new ArrayList<String>();
+
     for (IdeaPluginDescriptorImpl descriptor : ourPlugins) {
       final String version = descriptor.getVersion();
       String s = descriptor.getName() + (version != null ? " (" + version + ")" : "");
       if (descriptor.isEnabled()) {
-        loaded.add(s);
+        if (descriptor.isBundled() || SPECIAL_IDEA_PLUGIN.equals(descriptor.getName())) loadedBundled.add(s);
+        else loadedCustom.add(s);
       }
       else {
         disabled.add(s);
       }
     }
-    getLogger().info("Loaded plugins:" + StringUtil.join(loaded, ", "));
+
+    Collections.sort(loadedBundled);
+    Collections.sort(loadedCustom);
+    Collections.sort(disabled);
+
+    getLogger().info("Loaded bundled plugins: " + StringUtil.join(loadedBundled, ", "));
+    if (!loadedCustom.isEmpty()) {
+      getLogger().info("Loaded custom plugins: " + StringUtil.join(loadedCustom, ", "));
+    }
     if (!disabled.isEmpty()) {
       getLogger().info("Disabled plugins: " + StringUtil.join(disabled, ", "));
     }
@@ -163,6 +172,7 @@ public class PluginManager {
     try {
       //noinspection HardCodedStringLiteral
       ThreadGroup threadGroup = new ThreadGroup("Idea Thread Group") {
+        @Override
         public void uncaughtException(Thread t, Throwable e) {
           if (!(e instanceof ProcessCanceledException)) {
             getLogger().error(e);
@@ -171,6 +181,7 @@ public class PluginManager {
       };
 
       Runnable runnable = new Runnable() {
+        @Override
         public void run() {
           try {
             ClassloaderUtil.clearJarURLCache();
@@ -183,8 +194,15 @@ public class PluginManager {
             method.invoke(null, new Object[]{args});
           }
           catch (Exception e) {
-            e.printStackTrace();
-            getLogger().error("Error while accessing " + mainClass + "." + methodName + " with arguments: " + Arrays.asList(args), e);
+            e.printStackTrace(System.err);
+            String message = "Error while accessing " + mainClass + "." + methodName + " with arguments: " + Arrays.asList(args);
+            if ("true".equals(System.getProperty("java.awt.headless"))) {
+              //noinspection UseOfSystemOutOrSystemErr
+              System.err.println(message);
+            }
+            else {
+              JOptionPane.showMessageDialog(null, message + ": " + e.getClass().getName() + ": " + e.getMessage() + "\n" + ExceptionUtil.getThrowableText(e), "Error starting IntelliJ Platform", JOptionPane.ERROR_MESSAGE);
+            }
           }
         }
       };
@@ -199,10 +217,11 @@ public class PluginManager {
 
   private static void initializePlugins(@Nullable StartupProgress progress) {
     configureExtensions();
-    
+
     final IdeaPluginDescriptorImpl[] pluginDescriptors = loadDescriptors(progress);
 
-    final Class callerClass = Reflection.getCallerClass(1);
+    final Class callerClass = ReflectionUtil.findCallerClass(1);
+    assert callerClass != null;
     final ClassLoader parentLoader = callerClass.getClassLoader();
 
     final List<IdeaPluginDescriptorImpl> result = new ArrayList<IdeaPluginDescriptorImpl>();
@@ -274,7 +293,7 @@ public class PluginManager {
     ourPlugins = pluginDescriptors;
   }
 
-  public static void initClassLoader(final ClassLoader parentLoader, final IdeaPluginDescriptorImpl descriptor) {
+  public static void initClassLoader(@NotNull ClassLoader parentLoader, @NotNull IdeaPluginDescriptorImpl descriptor) {
     final List<File> classPath = descriptor.getClassPath();
     final ClassLoader loader =
         createPluginClassLoader(classPath.toArray(new File[classPath.size()]), new ClassLoader[]{parentLoader}, descriptor);
@@ -293,7 +312,7 @@ public class PluginManager {
       if (optionalDescriptors != null && !optionalDescriptors.isEmpty()) {
         for (Map.Entry<PluginId, IdeaPluginDescriptorImpl> entry: optionalDescriptors.entrySet()) {
           if (descriptorsWithModules.containsKey(entry.getKey())) {
-            descriptor.mergeOptionalConfig(entry.getValue());  
+            descriptor.mergeOptionalConfig(entry.getValue());
           }
         }
       }
@@ -401,7 +420,7 @@ public class PluginManager {
   private static <T extends IdeaPluginDescriptor> void addModulesAsDependents(final Map<PluginId, T> map) {
     for (String module : ourAvailableModules) {
       // fake plugin descriptors to satisfy dependencies
-      map.put(PluginId.getId(module), (T) new IdeaPluginDescriptorImpl(null));
+      map.put(PluginId.getId(module), (T) new IdeaPluginDescriptorImpl());
     }
   }
 
@@ -442,9 +461,8 @@ public class PluginManager {
   }
 
   public static boolean isIncompatible(final IdeaPluginDescriptor descriptor) {
-    BuildNumber buildNumber;
     try {
-      buildNumber = getBuildNumber();
+      BuildNumber buildNumber = getBuildNumber();
       if (!StringUtil.isEmpty(descriptor.getSinceBuild())) {
         BuildNumber sinceBuild = BuildNumber.fromString(descriptor.getSinceBuild(), descriptor.getName());
         if (sinceBuild.compareTo(buildNumber) > 0) {
@@ -474,6 +492,7 @@ public class PluginManager {
     */
     final Comparator<PluginId> idComparator = builder.comparator();
     return new Comparator<IdeaPluginDescriptor>() {
+      @Override
       public int compare(IdeaPluginDescriptor o1, IdeaPluginDescriptor o2) {
         return idComparator.compare(o1.getPluginId(), o2.getPluginId());
       }
@@ -485,15 +504,18 @@ public class PluginManager {
     // this magic ensures that the dependent plugins always follow their dependencies in lexicographic order
     // needed to make sure that extensions are always in the same order
     Collections.sort(ids, new Comparator<PluginId>() {
+      @Override
       public int compare(PluginId o1, PluginId o2) {
         return o2.getIdString().compareTo(o1.getIdString());
       }
     });
     return GraphGenerator.create(CachingSemiGraph.create(new GraphGenerator.SemiGraph<PluginId>() {
+      @Override
       public Collection<PluginId> getNodes() {
         return ids;
       }
 
+      @Override
       public Iterator<PluginId> getIn(PluginId pluginId) {
         final IdeaPluginDescriptor descriptor = idToDescriptorMap.get(pluginId);
         ArrayList<PluginId> plugins = new ArrayList<PluginId>();
@@ -654,7 +676,7 @@ public class PluginManager {
           }
 
           IdeaPluginDescriptorImpl pluginDescriptor = loadDescriptor(file, PLUGIN_XML);
-          if (platformPrefix != null && pluginDescriptor != null && pluginDescriptor.getName().equals("IDEA CORE")) {
+          if (platformPrefix != null && pluginDescriptor != null && pluginDescriptor.getName().equals(SPECIAL_IDEA_PLUGIN)) {
             continue;
           }
           if (pluginDescriptor != null && !result.contains(pluginDescriptor)) {
@@ -724,10 +746,12 @@ public class PluginManager {
     for (final Iterator<IdeaPluginDescriptorImpl> it = result.iterator(); it.hasNext();) {
       final IdeaPluginDescriptorImpl pluginDescriptor = it.next();
       checkDependants(pluginDescriptor, new Function<PluginId, IdeaPluginDescriptor>() {
+        @Override
         public IdeaPluginDescriptor fun(final PluginId pluginId) {
           return idToDescriptorMap.get(pluginId);
         }
       }, new Condition<PluginId>() {
+        @Override
         public boolean value(final PluginId pluginId) {
           if (!idToDescriptorMap.containsKey(pluginId)) {
             pluginDescriptor.setEnabled(false);
@@ -812,7 +836,7 @@ public class PluginManager {
       if (processed.contains(dependentPluginId)) continue;
 
       // TODO[yole] should this condition be a parameter?
-      if (isModuleDependency(dependentPluginId) && (ourAvailableModules.isEmpty() || ourAvailableModules.contains(dependentPluginId.getIdString()))) {  
+      if (isModuleDependency(dependentPluginId) && (ourAvailableModules.isEmpty() || ourAvailableModules.contains(dependentPluginId.getIdString()))) {
         continue;
       }
       if (!optionalDependencies.contains(dependentPluginId)) {
@@ -890,8 +914,8 @@ public class PluginManager {
        Arrays.sort(files, new Comparator<File>() {
          @Override
          public int compare(File o1, File o2) {
-           if (o2.getName().startsWith((file.getName()))) return Integer.MAX_VALUE;
-           if (o1.getName().startsWith((file.getName()))) return -Integer.MAX_VALUE;
+           if (o2.getName().startsWith(file.getName())) return Integer.MAX_VALUE;
+           if (o1.getName().startsWith(file.getName())) return -Integer.MAX_VALUE;
            if (o2.getName().startsWith("resources")) return -Integer.MAX_VALUE;
            if (o1.getName().startsWith("resources")) return Integer.MAX_VALUE;
            return 0;
@@ -1110,7 +1134,7 @@ public class PluginManager {
   }
 
   public static boolean isPluginClass(String className) {
-    return getPluginByClassName(className) != null;
+    return ourPlugins != null && getPluginByClassName(className) != null;
   }
 
   @Nullable
@@ -1198,6 +1222,7 @@ public class PluginManager {
     if (pluginId != null && !ApplicationManager.getApplication().isHeadlessEnvironment()) {
       final boolean success = disablePlugin(pluginId.getIdString());
       SwingUtilities.invokeLater(new Runnable() {
+        @Override
         public void run() {
           JOptionPane.showMessageDialog(JOptionPane.getRootFrame(),
                                         "Incompatible plugin detected: " + pluginId.getIdString() +
@@ -1219,26 +1244,32 @@ public class PluginManager {
   }
 
   private static class IdeaLogProvider implements LogProvider {
+    @Override
     public void error(String message) {
       getLogger().error(message);
     }
 
+    @Override
     public void error(String message, Throwable t) {
       getLogger().error(message, t);
     }
 
+    @Override
     public void error(Throwable t) {
       getLogger().error(t);
     }
 
+    @Override
     public void warn(String message) {
       getLogger().info(message);
     }
 
+    @Override
     public void warn(String message, Throwable t) {
       getLogger().info(message, t);
     }
 
+    @Override
     public void warn(Throwable t) {
       getLogger().info(t);
     }

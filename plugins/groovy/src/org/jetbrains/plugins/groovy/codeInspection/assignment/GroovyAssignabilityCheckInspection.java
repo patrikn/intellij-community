@@ -25,10 +25,12 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.psi.*;
+import com.intellij.psi.impl.PsiSubstitutorImpl;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.Function;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -51,6 +53,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.GrListOrMap;
 import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrClosureSignature;
 import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrSignature;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrConstructorInvocation;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrField;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariable;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariableDeclaration;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.arguments.GrArgumentList;
@@ -63,6 +66,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.*;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.literals.GrString;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.path.GrIndexProperty;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.path.GrMethodCallExpression;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.params.GrParameter;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.*;
 import org.jetbrains.plugins.groovy.lang.psi.api.types.GrCodeReferenceElement;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrClosureType;
@@ -321,6 +325,26 @@ public class GroovyAssignabilityCheckInspection extends BaseInspection {
         return;
       }
 
+      if (variable instanceof GrParameter && ((GrParameter)variable).getDeclarationScope() instanceof GrMethod) {
+        final GrMethod method = (GrMethod)((GrParameter)variable).getDeclarationScope();
+        final PsiTypeParameter[] parameters = method.getTypeParameters();
+
+        Map<PsiTypeParameter, PsiType> map = ContainerUtil.newHashMap();
+        for (PsiTypeParameter parameter : parameters) {
+          final PsiClassType[] types = parameter.getSuperTypes();
+
+          if (types.length == 1) {
+            map.put(parameter, PsiWildcardType.createExtends(variable.getManager(), types[0]));
+          }
+          else {
+            map.put(parameter, PsiWildcardType.createExtends(variable.getManager(), PsiIntersectionType.createIntersection(types)));
+          }
+        }
+        PsiSubstitutor substitutor = PsiSubstitutorImpl.createSubstitutor(map);
+        checkAssignability(substitutor.substitute(varType), initializer);
+        return;
+      }
+
       checkAssignability(varType, initializer);
     }
 
@@ -518,7 +542,68 @@ public class GroovyAssignabilityCheckInspection extends BaseInspection {
     @Override
     public void visitIndexProperty(GrIndexProperty expression) {
       super.visitIndexProperty(expression);
-      checkMethodCall(expression, expression.getInvokedExpression());
+
+      if (!checkCannotInferArgumentTypes(expression.getInvokedExpression())) return;
+
+      final GrExpression invoked = expression.getInvokedExpression();
+
+      if (hasErrorElements(expression.getArgumentList())) return;
+
+      final PsiType type = invoked.getType();
+      final PsiType[] types = PsiUtil.getArgumentTypes(expression.getArgumentList(), true);
+      if (type instanceof PsiArrayType) {
+        assert types != null;
+
+        if (PsiUtil.isLValue(expression)) {
+          if (types.length == 2 &&
+              TypesUtil.isAssignable(PsiType.INT, types[0], expression) &&
+              TypesUtil.isAssignable(((PsiArrayType)type).getComponentType(), types[1], expression)) {
+            return;
+          }
+        }
+        else {
+          if (types.length == 1 && TypesUtil.isAssignable(PsiType.INT, types[0], expression)) {
+            return;
+          }
+        }
+      }
+
+      final GroovyResolveResult[] results = expression.multiResolve(false);
+
+      if (results.length == 1) {
+        final GroovyResolveResult resolveResult = results[0];
+        PsiElement resolved = resolveResult.getElement();
+
+        if (resolved instanceof PsiMethod && !resolveResult.isInvokedOnProperty()) {
+          checkMethodApplicability(resolveResult, invoked, true);
+        }
+        else if (resolved instanceof GrField) {
+          checkCallApplicability(((GrField)resolved).getTypeGroovy(), invoked, true);
+        }
+        else if (resolved instanceof PsiField) {
+          checkCallApplicability(((PsiField)resolved).getType(), invoked, true);
+        }
+      }
+      else if (results.length > 0) {
+        for (GroovyResolveResult resolveResult : results) {
+          PsiElement resolved = resolveResult.getElement();
+          if (resolved instanceof PsiMethod && !resolveResult.isInvokedOnProperty()) {
+            if (!checkMethodApplicability(resolveResult, invoked, false)) return;
+          }
+          else if (resolved instanceof GrField) {
+            if (!checkCallApplicability(((GrField)resolved).getTypeGroovy(), invoked, false)) return;
+          }
+          else if (resolved instanceof PsiField) {
+            if (!checkCallApplicability(((PsiField)resolved).getType(), invoked, false)) return;
+          }
+        }
+
+        registerError(getElementToHighlight(invoked, PsiUtil.getArgumentsList(invoked)), GroovyBundle.message("method.call.is.ambiguous"));
+      }
+      else {
+        final String typesString = buildArgTypesList(types);
+        registerError(PsiUtil.getArgumentsList(invoked), GroovyBundle.message("cannot.find.operator.overload.method", typesString));
+      }
     }
 
     private boolean checkCannotInferArgumentTypes(PsiElement place) {
@@ -623,7 +708,7 @@ public class GroovyAssignabilityCheckInspection extends BaseInspection {
         else if (results.length > 0) {
           for (GroovyResolveResult result : results) {
             resolved = result.getElement();
-            if (resolved instanceof PsiMethod && !resolveResult.isInvokedOnProperty()) {
+            if (resolved instanceof PsiMethod && !result.isInvokedOnProperty()) {
               if (!checkMethodApplicability(result, referenceExpression, false)) return;
             }
             else {

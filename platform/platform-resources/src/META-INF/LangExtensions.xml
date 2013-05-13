@@ -72,7 +72,7 @@
                         serviceImplementation="com.intellij.codeEditor.printing.PrintSettings"/>
     <exportable serviceInterface="com.intellij.codeEditor.printing.PrintSettings"/>
     <applicationService serviceInterface="com.intellij.codeInsight.daemon.DaemonCodeAnalyzerSettings"
-                        serviceImplementation="com.intellij.codeInsight.daemon.DaemonCodeAnalyzerSettings"/>
+                        serviceImplementation="com.intellij.codeInsight.daemon.DaemonCodeAnalyzerSettingsImpl"/>
     <exportable serviceInterface="com.intellij.codeInsight.daemon.DaemonCodeAnalyzerSettings"/>
 
     <applicationService serviceInterface="com.intellij.facet.FacetTypeRegistry"
@@ -790,6 +790,7 @@
 
     <refactoring.moveDirectoryWithClassesHelper
         implementation="com.intellij.refactoring.move.moveClassesOrPackages.MoveDirectoryWithClassesHelper$Default" order="last"/>
+    <codeHighlighting.iconCreator implementation="com.intellij.codeHighlighting.DefaultIconCreator"/>
 
     <checkinHandlerFactory implementation="com.intellij.openapi.vcs.checkin.ReformatCheckinHandlerFactory"/>
     <checkinHandlerFactory implementation="com.intellij.openapi.vcs.checkin.OptimizeOptionsCheckinHandlerFactory"/>
@@ -827,6 +828,11 @@
     <usageContextPanelProvider implementation="com.intellij.usageView.impl.UsageContextCallHierarchyPanel$Provider"/>
     <fileDocumentSynchronizationVetoer implementation="com.intellij.codeInsight.lookup.impl.LookupDocumentSavingVetoer"/>
     <toolsProvider implementation="com.intellij.tools.LocalToolsProvider"/>
+
+    <favoritesListProvider implementation="com.intellij.ide.bookmarks.BookmarksFavoriteListProvider"/>
+    <favoritesListProvider implementation="com.intellij.xdebugger.impl.breakpoints.BreakpointsFavoriteListProvider"/>
+    <applicationService serviceInterface="com.intellij.codeInsight.FileModificationService"
+                        serviceImplementation="com.intellij.codeInsight.CodeInsightUtilBase"/>
   </extensions>
 </idea-plugin>
 

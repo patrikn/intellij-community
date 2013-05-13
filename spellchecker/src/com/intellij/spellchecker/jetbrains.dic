@@ -24,6 +24,7 @@ backend
 backtrace
 barcode
 basedir
+basename
 basicfile
 batis
 bfile
@@ -37,6 +38,8 @@ bool
 breakpoint
 breakpoints
 btree
+buffered
+buffering
 builtin
 bzip
 calc
@@ -456,6 +459,7 @@ twitter
 typedef
 typedefs
 unboxing
+unbuffered
 uncomment
 uncommented
 underwave

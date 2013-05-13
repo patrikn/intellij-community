@@ -15,14 +15,16 @@
  */
 package org.jetbrains.plugins.javaFX.fxml.codeInsight.inspections;
 
-import com.intellij.codeInsight.CodeInsightUtilBase;
 import com.intellij.codeInsight.ExpectedTypeInfo;
 import com.intellij.codeInsight.ExpectedTypeInfoImpl;
+import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.TailType;
 import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInsight.daemon.impl.quickfix.CreateFieldFromUsageFix;
 import com.intellij.codeInsight.daemon.impl.quickfix.CreateFieldFromUsageHelper;
 import com.intellij.codeInspection.*;
+import com.intellij.lang.LanguageNamesValidation;
+import com.intellij.lang.refactoring.NamesValidator;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -63,12 +65,15 @@ public class JavaFxUnresolvedFxIdReferenceInspection extends XmlSuppressableInsp
             final PsiClass controllerClass = JavaFxPsiUtil.getControllerClass(attribute.getContainingFile());
             if (controllerClass != null) {
               final PsiReference reference = valueElement.getReference();
-              if (reference instanceof JavaFxFieldIdReferenceProvider.JavaFxControllerFieldRef && reference.resolve() == null) {
+              if (reference instanceof JavaFxFieldIdReferenceProvider.JavaFxControllerFieldRef && ((JavaFxFieldIdReferenceProvider.JavaFxControllerFieldRef)reference).isUnresolved()) {
                 final PsiClass fieldClass =
                   checkContext(((JavaFxFieldIdReferenceProvider.JavaFxControllerFieldRef)reference).getXmlAttributeValue());
                 if (fieldClass != null) {
+                  final String text = reference.getCanonicalText();
+                  final NamesValidator namesValidator = LanguageNamesValidation.INSTANCE.forLanguage(fieldClass.getLanguage());
+                  boolean validName = namesValidator != null && namesValidator.isIdentifier(text, fieldClass.getProject());
                   holder.registerProblem(reference.getElement(), reference.getRangeInElement(), "Unresolved fx:id reference",
-                                         isOnTheFly ? new LocalQuickFix[]{new CreateFieldFromUsageQuickFix(reference.getCanonicalText())} : LocalQuickFix.EMPTY_ARRAY);
+                                         isOnTheFly && validName ? new LocalQuickFix[]{new CreateFieldFromUsageQuickFix(text)} : LocalQuickFix.EMPTY_ARRAY);
                 }
               }
             }
@@ -126,7 +131,7 @@ public class JavaFxUnresolvedFxIdReferenceInspection extends XmlSuppressableInsp
       assert reference != null;
 
       final PsiClass targetClass = reference.getAClass();
-      if (!CodeInsightUtilBase.prepareFileForWrite(targetClass.getContainingFile())) {
+      if (!FileModificationService.getInstance().prepareFileForWrite(targetClass.getContainingFile())) {
         return;
       }
       final PsiElementFactory factory = JavaPsiFacade.getElementFactory(project);

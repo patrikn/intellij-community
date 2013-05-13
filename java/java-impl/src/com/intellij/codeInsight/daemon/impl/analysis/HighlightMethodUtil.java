@@ -32,6 +32,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.infos.CandidateInfo;
 import com.intellij.psi.infos.MethodCandidateInfo;
 import com.intellij.psi.util.*;
+import com.intellij.refactoring.util.RefactoringChangeUtil;
 import com.intellij.ui.ColorUtil;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.xml.util.XmlStringUtil;
@@ -146,6 +147,14 @@ public class HighlightMethodUtil {
                                                          String detailMessage,
                                                          PsiMethod methodToHighlight) {
     if (superReturnType == null) return null;
+    if ("clone".equals(method.getName())) {
+      final PsiClass containingClass = method.getContainingClass();
+      final PsiClass superContainingClass = superMethod.getContainingClass();
+      if (containingClass != null && superContainingClass != null && containingClass.isInterface() && !superContainingClass.isInterface()) {
+        return null;
+      }
+    }
+
     PsiType substitutedSuperReturnType;
     final boolean isJdk15 = PsiUtil.isLanguageLevel5OrHigher(method);
     if (isJdk15 && !superMethodSignature.isRaw() && superMethodSignature.equals(methodSignature)) { //see 8.4.5
@@ -634,7 +643,7 @@ public class HighlightMethodUtil {
            ? createShortMismatchedArgumentsHtmlTooltip(list, parameters, methodName, substitutor, aClass)
            : createLongMismatchedArgumentsHtmlTooltip(list, parameters, methodName, substitutor, aClass);
   }
-  
+
   @Language("HTML")
   private static String createLongMismatchedArgumentsHtmlTooltip(PsiExpressionList list,
                                                              PsiParameter[] parameters,
@@ -669,7 +678,7 @@ public class HighlightMethodUtil {
         }
       }
       s += "</nobr></b></td>";
-      
+
       s += "<td><b><nobr>";
       if (parameter != null) {
         PsiType type = substitutor.substitute(parameter.getType());
@@ -856,6 +865,7 @@ public class HighlightMethodUtil {
     boolean isExtension = method.hasModifierProperty(PsiModifier.DEFAULT);
     boolean isStatic = method.hasModifierProperty(PsiModifier.STATIC);
 
+    final List<IntentionAction> additionalFixes = new ArrayList<IntentionAction>();
     String description = null;
     if (hasNoBody) {
       if (isExtension) {
@@ -868,6 +878,10 @@ public class HighlightMethodUtil {
     else if (isInterface) {
       if (!isExtension && !isStatic) {
         description = JavaErrorMessages.message("interface.methods.cannot.have.body");
+        if (PsiUtil.isLanguageLevel8OrHigher(method)) {
+          additionalFixes.add(QUICK_FIX_FACTORY.createModifierListFix(method, PsiModifier.DEFAULT, true, false));
+          additionalFixes.add(QUICK_FIX_FACTORY.createModifierListFix(method, PsiModifier.STATIC, true, false));
+        }
       }
       else if (isExtension) {
         return HighlightUtil.checkExtensionMethodsFeature(method);
@@ -886,11 +900,14 @@ public class HighlightMethodUtil {
 
     TextRange textRange = HighlightNamesUtil.getMethodDeclarationTextRange(method);
     HighlightInfo info = HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(textRange).descriptionAndTooltip(description).create();
-    if (hasNoBody) {
+    if (!hasNoBody) {
       QuickFixAction.registerQuickFixAction(info, new DeleteMethodBodyFix(method));
     }
     if (method.hasModifierProperty(PsiModifier.ABSTRACT) && isInterface) {
       QuickFixAction.registerQuickFixAction(info, QUICK_FIX_FACTORY.createModifierListFix(method, PsiModifier.ABSTRACT, false, false));
+    }
+    for (IntentionAction intentionAction : additionalFixes) {
+      QuickFixAction.registerQuickFixAction(info, intentionAction);
     }
     return info;
   }
@@ -898,7 +915,7 @@ public class HighlightMethodUtil {
   @Nullable
   static HighlightInfo checkConstructorCallMustBeFirstStatement(PsiReferenceExpression expression) {
     PsiElement methodCall = expression.getParent();
-    if (!HighlightUtil.isSuperOrThisMethodCall(methodCall)) return null;
+    if (!RefactoringChangeUtil.isSuperOrThisMethodCall(methodCall)) return null;
     PsiElement codeBlock = methodCall.getParent().getParent();
     if (codeBlock instanceof PsiCodeBlock
         && codeBlock.getParent() instanceof PsiMethod
@@ -1104,7 +1121,7 @@ public class HighlightMethodUtil {
           highlightInfo = checkMethodIncompatibleReturnType(signature, superSignatures, false);
         }
       }
-      if (highlightInfo != null) description = highlightInfo.description;
+      if (highlightInfo != null) description = highlightInfo.getDescription();
 
       if (method.hasModifierProperty(PsiModifier.STATIC)) {
         for (HierarchicalMethodSignature superSignature : superSignatures) {
@@ -1123,12 +1140,12 @@ public class HighlightMethodUtil {
 
       if (description == null) {
         highlightInfo = checkMethodIncompatibleThrows(signature, superSignatures, false, aClass);
-        if (highlightInfo != null) description = highlightInfo.description;
+        if (highlightInfo != null) description = highlightInfo.getDescription();
       }
 
       if (description == null) {
         highlightInfo = checkMethodWeakerPrivileges(signature, superSignatures, false);
-        if (highlightInfo != null) description = highlightInfo.description;
+        if (highlightInfo != null) description = highlightInfo.getDescription();
       }
 
       if (description != null) break;

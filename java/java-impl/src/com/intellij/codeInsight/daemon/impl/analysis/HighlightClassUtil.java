@@ -22,8 +22,8 @@
 package com.intellij.codeInsight.daemon.impl.analysis;
 
 import com.intellij.codeInsight.ClassUtil;
-import com.intellij.codeInsight.CodeInsightUtilBase;
 import com.intellij.codeInsight.ExceptionUtil;
+import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.daemon.JavaErrorMessages;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.HighlightInfoType;
@@ -50,6 +50,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.impl.source.jsp.jspJava.JspClass;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.*;
+import com.intellij.refactoring.util.RefactoringChangeUtil;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -86,6 +87,11 @@ public class HighlightClassUtil {
 
   @Nullable
   static HighlightInfo checkClassWithAbstractMethods(PsiClass aClass, TextRange range) {
+    return checkClassWithAbstractMethods(aClass, aClass, range);
+  }
+
+  @Nullable
+  static HighlightInfo checkClassWithAbstractMethods(PsiClass aClass, PsiElement implementsFixElement, TextRange range) {
     PsiMethod abstractMethod = ClassUtil.getAnyAbstractMethod(aClass);
 
     if (abstractMethod == null || abstractMethod.getContainingClass() == null) {
@@ -93,14 +99,14 @@ public class HighlightClassUtil {
     }
     String baseClassName = HighlightUtil.formatClass(aClass, false);
     String methodName = HighlightUtil.formatMethod(abstractMethod);
-    String message = JavaErrorMessages.message(aClass instanceof PsiEnumConstantInitializer ? "enum.constant.should.implement.method" : "class.must.be.abstract",
+    String message = JavaErrorMessages.message(aClass instanceof PsiEnumConstantInitializer || implementsFixElement instanceof PsiEnumConstant ? "enum.constant.should.implement.method" : "class.must.be.abstract",
                                                baseClassName,
                                                methodName,
                                                HighlightUtil.formatClass(abstractMethod.getContainingClass(), false));
 
     HighlightInfo errorResult = HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(range).descriptionAndTooltip(message).create();
     if (ClassUtil.getAnyMethodToImplement(aClass) != null) {
-      QuickFixAction.registerQuickFixAction(errorResult, QUICK_FIX_FACTORY.createImplementMethodsFix(aClass));
+      QuickFixAction.registerQuickFixAction(errorResult, QUICK_FIX_FACTORY.createImplementMethodsFix(implementsFixElement));
     }
     if (!(aClass instanceof PsiAnonymousClass)
         && HighlightUtil.getIncompatibleModifier(PsiModifier.ABSTRACT, aClass.getModifierList()) == null) {
@@ -772,8 +778,8 @@ public class HighlightClassUtil {
           // must be inner class
           if (!PsiUtil.isInnerClass(base)) return;
 
-          if (resolve == resolved && baseClass != null && !PsiTreeUtil.isAncestor(baseClass, extendRef, true) &&
-              !hasEnclosingInstanceInScope(baseClass, extendRef, true, true) && !qualifiedNewCalledInConstructors(aClass, baseClass)) {
+          if (resolve == resolved && baseClass != null && (!PsiTreeUtil.isAncestor(baseClass, extendRef, true) || aClass.hasModifierProperty(PsiModifier.STATIC)) &&
+              !hasEnclosingInstanceInScope(baseClass, extendRef, !aClass.hasModifierProperty(PsiModifier.STATIC), true) && !qualifiedNewCalledInConstructors(aClass, baseClass)) {
             String description = JavaErrorMessages.message("no.enclosing.instance.in.scope", HighlightUtil.formatClass(baseClass));
             infos[0] = HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(extendRef).descriptionAndTooltip(description).create();
           }
@@ -795,7 +801,7 @@ public class HighlightClassUtil {
       PsiStatement firstStatement = statements[0];
       if (!(firstStatement instanceof PsiExpressionStatement)) return false;
       PsiExpression expression = ((PsiExpressionStatement)firstStatement).getExpression();
-      if (!HighlightUtil.isSuperOrThisMethodCall(expression)) return false;
+      if (!RefactoringChangeUtil.isSuperOrThisMethodCall(expression)) return false;
       PsiMethodCallExpression methodCallExpression = (PsiMethodCallExpression)expression;
       if (PsiKeyword.THIS.equals(methodCallExpression.getMethodExpression().getReferenceName())) continue;
       PsiReferenceExpression referenceExpression = methodCallExpression.getMethodExpression();
@@ -882,7 +888,7 @@ public class HighlightClassUtil {
 
   @Nullable
   public static HighlightInfo checkSuperQualifierType(@NotNull Project project, @NotNull PsiMethodCallExpression superCall) {
-    if (!HighlightUtil.isSuperMethodCall(superCall)) return null;
+    if (!RefactoringChangeUtil.isSuperMethodCall(superCall)) return null;
     PsiMethod ctr = PsiTreeUtil.getParentOfType(superCall, PsiMethod.class, true, PsiMember.class);
     if (ctr == null) return null;
     final PsiClass aClass = ctr.getContainingClass();
@@ -974,7 +980,7 @@ public class HighlightClassUtil {
                        @NotNull final PsiElement startElement,
                        @NotNull PsiElement endElement) {
       final PsiFile containingFile = startElement.getContainingFile();
-      if (editor == null || !CodeInsightUtilBase.prepareFileForWrite(containingFile)) return;
+      if (editor == null || !FileModificationService.getInstance().prepareFileForWrite(containingFile)) return;
       PsiJavaCodeReferenceElement classReference = ((PsiNewExpression)startElement).getClassReference();
       if (classReference == null) return;
       final PsiClass psiClass = (PsiClass)classReference.resolve();

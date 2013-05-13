@@ -30,6 +30,7 @@ import gnu.trove.TObjectIntHashMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.plugins.groovy.config.GroovyConfigUtils;
 import org.jetbrains.plugins.groovy.lang.lexer.TokenSets;
 import org.jetbrains.plugins.groovy.lang.parser.GroovyElementTypes;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyElementVisitor;
@@ -38,11 +39,14 @@ import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.GrModifier;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.GrModifierFlags;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.GrModifierList;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.annotation.GrAnnotation;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrField;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariable;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariableDeclaration;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.params.GrParameter;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrTypeDefinition;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrTypeDefinitionBody;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrEnumConstant;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMethod;
 import org.jetbrains.plugins.groovy.lang.psi.api.toplevel.packaging.GrPackageDefinition;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrStubElementBase;
 import org.jetbrains.plugins.groovy.lang.psi.stubs.GrModifierListStub;
@@ -60,6 +64,7 @@ public class GrModifierListImpl extends GrStubElementBase<GrModifierListStub> im
   public static final TObjectIntHashMap<String> NAME_TO_MODIFIER_FLAG_MAP = new TObjectIntHashMap<String>();
   public static final Map<String, IElementType> NAME_TO_MODIFIER_ELEMENT_TYPE = ContainerUtil.newHashMap();
   private static final ArrayFactory<GrAnnotation> ARRAY_FACTORY = new ArrayFactory<GrAnnotation>() {
+    @NotNull
     @Override
     public GrAnnotation[] create(int count) {
       return new GrAnnotation[count];
@@ -203,12 +208,31 @@ public class GrModifierListImpl extends GrStubElementBase<GrModifierListStub> im
     }
 
     if (owner instanceof GrTypeDefinition) {
+      final GrTypeDefinition clazz = (GrTypeDefinition)owner;
+
       if (modifier.equals(GrModifier.STATIC)) {
-        final PsiClass containingClass = ((GrTypeDefinition)owner).getContainingClass();
+        final PsiClass containingClass = clazz.getContainingClass();
         return containingClass != null && containingClass.isInterface();
       }
       if (modifier.equals(GrModifier.ABSTRACT)) {
-        return ((GrTypeDefinition)owner).isInterface();
+        if (clazz.isInterface()) return true;
+        if (clazz.isEnum() &&
+            GroovyConfigUtils.getInstance().isVersionAtLeast(modifierList, GroovyConfigUtils.GROOVY2_0)) {
+          for (GrMethod method : clazz.getCodeMethods()) {
+            if (method.hasModifierProperty(PsiModifier.ABSTRACT)) return true;
+          }
+        }
+      }
+      if (modifier.equals(GrModifier.FINAL)) {
+        if (clazz.isEnum()) {
+          final GrField[] fields = clazz.getFields();
+          for (GrField field : fields) {
+            if (field instanceof GrEnumConstant && ((GrEnumConstant)field).getInitializingClass() != null) {
+              return false;
+            }
+          }
+          return true;
+        }
       }
     }
 

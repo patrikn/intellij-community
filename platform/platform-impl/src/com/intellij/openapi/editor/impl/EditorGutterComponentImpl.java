@@ -146,6 +146,9 @@ class EditorGutterComponentImpl extends EditorGutterComponentEx implements Mouse
 
   @Override
   public Dimension getPreferredSize() {
+    if (UISettings.getInstance().PRESENTATION_MODE) {
+      return new Dimension(myEditor.getFontMetrics(Font.PLAIN).getHeight(), myEditor.getPreferredHeight());
+    }
     int w = getLineNumberAreaWidth() + getLineMarkerAreaWidth() + getFoldingAreaWidth() + getAnnotationsAreaWidth();
     myLastPreferredHeight = myEditor.getPreferredHeight();
     return new Dimension(w, myLastPreferredHeight);
@@ -171,8 +174,17 @@ class EditorGutterComponentImpl extends EditorGutterComponentEx implements Mouse
 
   @Override
   public void paint(Graphics g) {
-    ((ApplicationImpl)ApplicationManager.getApplication()).editorPaintStart();
+    if (UISettings.getInstance().PRESENTATION_MODE) {
+      g.setColor(myEditor.getColorsScheme().getDefaultBackground());
+      Dimension size = getPreferredSize();
+      Rectangle bounds = g.getClipBounds();
+      if (bounds.height >= 0) {
+        g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+      }
+      return;
+    }
 
+    ((ApplicationImpl)ApplicationManager.getApplication()).editorPaintStart();
     try {
       Rectangle clip = g.getClipBounds();
       if (clip.height < 0) return;
@@ -1402,6 +1414,14 @@ class EditorGutterComponentImpl extends EditorGutterComponentEx implements Mouse
                                                                                         actionGroup);
           popupMenu.getComponent().show(this, e.getX(), e.getY());
           e.consume();
+        } else {
+          AnAction rightButtonAction = renderer.getRightButtonClickAction();
+          if (rightButtonAction != null) {
+            rightButtonAction.actionPerformed(new AnActionEvent(e, myEditor.getDataContext(), "ICON_NAVIGATION_SECONDARY_BUTTON", rightButtonAction.getTemplatePresentation(),
+                                                                ActionManager.getInstance(),
+                                                                e.getModifiers()));
+            e.consume();
+          }
         }
       }
       else {

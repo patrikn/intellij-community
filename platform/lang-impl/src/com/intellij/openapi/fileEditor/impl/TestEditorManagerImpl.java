@@ -35,7 +35,6 @@ import com.intellij.openapi.util.ActionCallback;
 import com.intellij.openapi.util.AsyncResult;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Pair;
-import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
@@ -98,8 +97,9 @@ import java.util.Map;
     return false;
   }
 
+  @NotNull
   @Override
-  public ActionCallback notifyPublisher(Runnable runnable) {
+  public ActionCallback notifyPublisher(@NotNull Runnable runnable) {
     runnable.run();
     return new ActionCallback.Done();
   }
@@ -245,6 +245,7 @@ import java.util.Map;
     return null;
   }
 
+  @NotNull
   @Override
   public AsyncResult<EditorWindow> getActiveWindow() {
     return new AsyncResult.Done<EditorWindow>(null);
@@ -260,7 +261,7 @@ import java.util.Map;
   }
 
   @Override
-  public void updateFilePresentation(VirtualFile file) {
+  public void updateFilePresentation(@NotNull VirtualFile file) {
   }
 
   @Override
@@ -306,7 +307,7 @@ import java.util.Map;
 
   @Override
   @NotNull
-  public VirtualFile[] getSiblings(VirtualFile file) {
+  public VirtualFile[] getSiblings(@NotNull VirtualFile file) {
     throw new UnsupportedOperationException();
   }
 
@@ -394,7 +395,7 @@ import java.util.Map;
   }
 
   @Override
-  public Editor openTextEditor(OpenFileDescriptor descriptor, boolean focusEditor) {
+  public Editor openTextEditor(@NotNull OpenFileDescriptor descriptor, boolean focusEditor) {
     final VirtualFile file = descriptor.getFile();
     Editor editor = myVirtualFile2Editor.get(file);
 
@@ -455,7 +456,7 @@ import java.util.Map;
   @Override
   @NotNull
   public Pair<FileEditor[], FileEditorProvider[]> getEditorsWithProviders(@NotNull VirtualFile file) {
-    return null;
+    return Pair.create(new FileEditor[0], new FileEditorProvider[0]);
   }
 
   @Override
@@ -474,6 +475,7 @@ import java.util.Map;
     return "TestEditorManager";
   }
 
+  @NotNull
   @Override
   public EditorsSplitters getSplitters() {
     return null;
@@ -482,5 +484,9 @@ import java.util.Map;
   @Override
   public ActionCallback getReady(@NotNull Object requestor) {
     return new ActionCallback.Done();
+  }
+
+  @Override
+  public void setSelectedEditor(@NotNull VirtualFile file, String fileEditorProviderId) {
   }
 }

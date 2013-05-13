@@ -319,11 +319,11 @@ public class PsiImplUtil {
   }
 
   @Nullable
-  public static PsiAnnotation findAnnotation(@NotNull PsiAnnotationOwner annotationOwner, @NotNull String qualifiedName) {
+  public static PsiAnnotation findAnnotation(@Nullable PsiAnnotationOwner annotationOwner, @NotNull String qualifiedName) {
+    if (annotationOwner == null) return null;
+
     PsiAnnotation[] annotations = annotationOwner.getAnnotations();
-    if (annotations.length == 0) {
-      return null;
-    }
+    if (annotations.length == 0) return null;
 
     String shortName = StringUtil.getShortName(qualifiedName);
     for (PsiAnnotation annotation : annotations) {
@@ -372,11 +372,11 @@ public class PsiImplUtil {
 
   // todo[r.sh] cache?
   @Nullable
-  private static Set<TargetType> getAnnotationTargets(PsiClass annotationType) {
+  public static Set<TargetType> getAnnotationTargets(PsiClass annotationType) {
     if (!annotationType.isAnnotationType()) return null;
     PsiModifierList modifierList = annotationType.getModifierList();
     if (modifierList == null) return null;
-    PsiAnnotation target = modifierList.findAnnotation(CommonClassNames.TARGET_ANNOTATION_FQ_NAME);
+    PsiAnnotation target = modifierList.findAnnotation(CommonClassNames.JAVA_LANG_ANNOTATION_TARGET);
     if (target == null) return DEFAULT_TARGETS;  // if omitted it is applicable to all but Java 8 TYPE_USE/TYPE_PARAMETERS targets
 
     PsiAnnotationMemberValue value = target.findAttributeValue(null);
@@ -489,6 +489,10 @@ public class PsiImplUtil {
     while (toplevel.getParent() instanceof PsiArrayAccessExpression &&
            ((PsiArrayAccessExpression)toplevel.getParent()).getArrayExpression() == toplevel) {
       toplevel = (PsiExpression)toplevel.getParent();
+    }
+
+    if (toplevel instanceof PsiArrayAccessExpression && !PsiUtil.isAccessedForWriting(toplevel)) {
+      return PsiUtil.captureToplevelWildcards(type, expression);
     }
 
     final PsiType normalized = doNormalizeWildcardByPosition(type, expression, toplevel);
@@ -731,20 +735,17 @@ public class PsiImplUtil {
     return null;
   }
 
-  public static void addTypeUseAnnotationsFromModifierList(@NotNull PsiElement member, @NotNull List<PsiAnnotation> annotations) {
-    if (member instanceof PsiModifierListOwner) {
-      PsiModifierList modifierList = ((PsiModifierListOwner)member).getModifierList();
-      if (modifierList != null) {
-        addTypeUseAnnotations(modifierList, annotations);
-      }
-    }
-  }
+  @Nullable
+  public static List<PsiAnnotation> getTypeUseAnnotations(@NotNull PsiModifierList modifierList) {
+    SmartList<PsiAnnotation> result = null;
 
-  public static void addTypeUseAnnotations(@NotNull PsiModifierList modifierList, @NotNull List<PsiAnnotation> annotations) {
     for (PsiAnnotation annotation : modifierList.getAnnotations()) {
       if (findApplicableTarget(annotation, TargetType.TYPE_USE) == TargetType.TYPE_USE) {
-        annotations.add(annotation);
+        if (result == null) result = new SmartList<PsiAnnotation>();
+        result.add(annotation);
       }
     }
+
+    return result;
   }
 }

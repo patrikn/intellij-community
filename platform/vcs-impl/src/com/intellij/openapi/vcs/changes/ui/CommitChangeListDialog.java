@@ -660,6 +660,7 @@ public class CommitChangeListDialog extends DialogWrapper implements CheckinProj
       final DefaultListCleaner defaultListCleaner = new DefaultListCleaner();
       runBeforeCommitHandlers(new Runnable() {
         public void run() {
+          boolean success = false;
           try {
             final boolean completed = ProgressManager.getInstance().runProcessWithProgressSynchronously(
               new Runnable() {
@@ -673,6 +674,7 @@ public class CommitChangeListDialog extends DialogWrapper implements CheckinProj
                 handler.checkinSuccessful();
               }
 
+              success = true;
               defaultListCleaner.clean();
               close(OK_EXIT_CODE);
             }
@@ -686,6 +688,16 @@ public class CommitChangeListDialog extends DialogWrapper implements CheckinProj
 
             for (CheckinHandler handler : myHandlers) {
               handler.checkinFailed(Arrays.asList(new VcsException(e)));
+            }
+          }
+          finally {
+            if (myResultHandler != null) {
+              if (success) {
+                myResultHandler.onSuccess(getCommitMessage());
+              }
+              else {
+                myResultHandler.onFailure();
+              }
             }
           }
         }
@@ -966,14 +978,13 @@ public class CommitChangeListDialog extends DialogWrapper implements CheckinProj
 
     rootPane.add(mySplitter, BorderLayout.CENTER);
 
-    JComponent browserHeader = myBrowser.getHeaderPanel();
-    myBrowser.remove(browserHeader);
-    rootPane.add(browserHeader, BorderLayout.NORTH);
-
-    JPanel infoPanel = new JPanel(new BorderLayout());
     myChangesInfoCalculator = new ChangeInfoCalculator();
     myLegend = new CommitLegendPanel(myChangesInfoCalculator);
-    infoPanel.add(myLegend.getComponent(), BorderLayout.NORTH);
+    JPanel legendPanel = new JPanel(new BorderLayout());
+    legendPanel.add(myLegend.getComponent(), BorderLayout.EAST);
+    myBrowser.getBottomPanel().add(legendPanel, BorderLayout.SOUTH);
+
+    JPanel infoPanel = new JPanel(new BorderLayout());
     infoPanel.add(myAdditionalOptionsPanel, BorderLayout.CENTER);
     rootPane.add(infoPanel, BorderLayout.EAST);
     infoPanel.setBorder(IdeBorderFactory.createEmptyBorder(0, 10, 0, 0));
@@ -1046,7 +1057,7 @@ public class CommitChangeListDialog extends DialogWrapper implements CheckinProj
         //
       }
     } else {
-      mySplitter.setProportion(0.8f);
+      mySplitter.setProportion(0.5f);
     }
   }
 

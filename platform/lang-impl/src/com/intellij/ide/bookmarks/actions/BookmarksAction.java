@@ -83,6 +83,12 @@ public class BookmarksAction extends AnAction implements DumbAware, MasterDetail
       .setList(list)
       .setDetailView(new DetailViewImpl(project))
       .setCloseOnEnter(false)
+      .setDoneRunnable(new Runnable() {
+        @Override
+        public void run() {
+          myPopup.cancel();
+        }
+      })
       .setDelegate(this).createMasterDetailPopup();
     new AnAction() {
       @Override
@@ -111,6 +117,7 @@ public class BookmarksAction extends AnAction implements DumbAware, MasterDetail
     if (bookmark != null) {
       popup.cancel();
       IdeFocusManager.getInstance(project).doWhenFocusSettlesDown(new Runnable() {
+        @Override
         public void run() {
           bookmark.navigate(true);
         }
@@ -118,6 +125,7 @@ public class BookmarksAction extends AnAction implements DumbAware, MasterDetail
     }
   }
 
+  @Override
   @Nullable
   public JComponent createAccessoryView(Project project) {
     if (!BookmarkManager.getInstance(project).hasBookmarksWithMnemonics()) {

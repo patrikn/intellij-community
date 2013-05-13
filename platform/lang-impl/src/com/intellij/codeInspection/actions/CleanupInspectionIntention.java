@@ -17,12 +17,13 @@
 package com.intellij.codeInspection.actions;
 
 import com.intellij.CommonBundle;
-import com.intellij.codeInsight.CodeInsightUtilBase;
+import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.intention.EmptyIntentionAction;
 import com.intellij.codeInsight.intention.HighPriorityAction;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInspection.*;
-import com.intellij.codeInspection.ex.*;
+import com.intellij.codeInspection.ex.InspectionToolWrapper;
+import com.intellij.codeInspection.ex.LocalInspectionToolWrapper;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
@@ -52,18 +53,21 @@ public class CleanupInspectionIntention implements IntentionAction, HighPriority
     myQuickfixClass = quickFixClass;
   }
 
+  @Override
   @NotNull
   public String getText() {
     return InspectionsBundle.message("fix.all.inspection.problems.in.file", myTool.getDisplayName());
   }
 
+  @Override
   @NotNull
   public String getFamilyName() {
     return getText();
   }
 
+  @Override
   public void invoke(@NotNull final Project project, final Editor editor, final PsiFile file) throws IncorrectOperationException {
-    if (!CodeInsightUtilBase.preparePsiElementForWrite(file)) return;
+    if (!FileModificationService.getInstance().preparePsiElementForWrite(file)) return;
     final List<CommonProblemDescriptor> descriptions =
       ProgressManager.getInstance().runProcess(new Computable<List<CommonProblemDescriptor>>() {
         @Override
@@ -73,9 +77,10 @@ public class CleanupInspectionIntention implements IntentionAction, HighPriority
       }, new EmptyProgressIndicator());
 
     Collections.sort(descriptions, new Comparator<CommonProblemDescriptor>() {
+      @Override
       public int compare(final CommonProblemDescriptor o1, final CommonProblemDescriptor o2) {
-        final ProblemDescriptorImpl d1 = (ProblemDescriptorImpl)o1;
-        final ProblemDescriptorImpl d2 = (ProblemDescriptorImpl)o2;
+        final ProblemDescriptorBase d1 = (ProblemDescriptorBase)o1;
+        final ProblemDescriptorBase d2 = (ProblemDescriptorBase)o2;
         return d2.getTextRange().getStartOffset() - d1.getTextRange().getStartOffset();
       }
     });
@@ -101,14 +106,16 @@ public class CleanupInspectionIntention implements IntentionAction, HighPriority
     }
   }
 
-  
 
 
+
+  @Override
   public boolean isAvailable(@NotNull final Project project, final Editor editor, final PsiFile file) {
     return myQuickfixClass != null && myQuickfixClass != EmptyIntentionAction.class && !(myTool instanceof LocalInspectionToolWrapper &&
                                                                                          ((LocalInspectionToolWrapper)myTool).isUnfair());
   }
 
+  @Override
   public boolean startInWriteAction() {
     return true;
   }

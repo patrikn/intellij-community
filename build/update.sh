@@ -11,19 +11,26 @@
 
 if [ ! -f "$WORK_IDEA_HOME/bin/inspect.sh" ]; then
   echo "WORK_IDEA_HOME must be defined and point to build you're updating."
-  exit
+  exit 1
 fi
 
 if [ ! -f "$DEV_IDEA_HOME/build/update.sh" ]; then
   echo "DEV_IDEA_HOME must be defined and point to source base you're updating from."
-  exit
+  exit 1
 fi
 
 echo "Updating $WORK_IDEA_HOME from compiled classes in $DEV_IDEA_HOME"
 
 ANT_HOME="$DEV_IDEA_HOME/lib/ant"
+ANT_CLASSPATH="$DEV_IDEA_HOME/build/lib/gant/lib/jps.jar"
 java -Xms64m -Xmx512m -Dant.home="$ANT_HOME" -classpath "$ANT_HOME/lib/ant-launcher.jar" org.apache.tools.ant.launch.Launcher \
- -f build/update.xml $TARGET
+ -lib "$ANT_CLASSPATH" -f $DEV_IDEA_HOME/build/update.xml $TARGET
+
+if [ "$?" != "0" ]; then
+  echo "Update failed; work IDEA build not modified."
+  rm -rf "$WORK_IDEA_HOME/___tmp___"
+  exit 2
+fi
 
 rm -rf $WORK_IDEA_HOME/lib
 rm -rf $WORK_IDEA_HOME/plugins

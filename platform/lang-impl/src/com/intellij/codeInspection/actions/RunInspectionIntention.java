@@ -23,20 +23,14 @@ import com.intellij.analysis.BaseAnalysisActionDialog;
 import com.intellij.codeInsight.daemon.HighlightDisplayKey;
 import com.intellij.codeInsight.intention.HighPriorityAction;
 import com.intellij.codeInsight.intention.IntentionAction;
-import com.intellij.codeInspection.InspectionManager;
-import com.intellij.codeInspection.InspectionProfileEntry;
-import com.intellij.codeInspection.InspectionsBundle;
-import com.intellij.codeInspection.ex.GlobalInspectionContextImpl;
-import com.intellij.codeInspection.ex.InspectionManagerEx;
-import com.intellij.codeInspection.ex.InspectionProfileImpl;
-import com.intellij.codeInspection.ex.LocalInspectionToolWrapper;
+import com.intellij.codeInspection.*;
+import com.intellij.codeInspection.ex.*;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.module.Module;
-import com.intellij.openapi.module.ModuleUtil;
+import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.profile.codeInspection.InspectionProfileManager;
-import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.util.IncorrectOperationException;
@@ -44,7 +38,6 @@ import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.LinkedHashSet;
-import java.util.Set;
 
 /**
  * User: anna
@@ -61,28 +54,27 @@ public class RunInspectionIntention implements IntentionAction, HighPriorityActi
     myShortName = key.toString();
   }
 
+  @Override
   @NotNull
   public String getText() {
     return InspectionsBundle.message("run.inspection.on.file.intention.text");
   }
 
+  @Override
   @NotNull
   public String getFamilyName() {
     return getText();
   }
 
+  @Override
   public boolean isAvailable(@NotNull Project project, Editor editor, PsiFile file) {
-    final InspectionProfileEntry tool =
-      InspectionProjectProfileManager.getInstance(project).getInspectionProfile().getInspectionTool(myShortName, file);
-    if (tool instanceof LocalInspectionToolWrapper && ((LocalInspectionToolWrapper)tool).isUnfair()) {
-      return false;
-    }
-    return true;
+    return LocalInspectionToolWrapper.findTool2RunInBatch(project, file, myShortName) != null;
   }
 
+  @Override
   public void invoke(@NotNull Project project, Editor editor, PsiFile file) throws IncorrectOperationException {
     final InspectionManagerEx managerEx = (InspectionManagerEx)InspectionManager.getInstance(project);
-    final Module module = ModuleUtil.findModuleForPsiElement(file);
+    final Module module = ModuleUtilCore.findModuleForPsiElement(file);
     AnalysisScope analysisScope = new AnalysisScope(file);
     final VirtualFile virtualFile = file.getVirtualFile();
     if (file.isPhysical() || virtualFile == null || !virtualFile.isInLocalFileSystem()) {
@@ -98,9 +90,7 @@ public class RunInspectionIntention implements IntentionAction, HighPriorityActi
     if (!dlg.isOK()) return;
     final AnalysisUIOptions uiOptions = AnalysisUIOptions.getInstance(project);
     analysisScope = dlg.getScope(uiOptions, analysisScope, project, module);
-    final InspectionProfileEntry baseTool =
-      InspectionProjectProfileManager.getInstance(project).getInspectionProfile().getInspectionTool(myShortName, file);
-    rerunInspection(baseTool, managerEx, analysisScope, file);
+    rerunInspection(LocalInspectionToolWrapper.findTool2RunInBatch(project, file, myShortName), managerEx, analysisScope, file);
   }
 
   public static void rerunInspection(final InspectionProfileEntry baseTool, final InspectionManagerEx managerEx, final AnalysisScope scope,
@@ -113,7 +103,7 @@ public class RunInspectionIntention implements IntentionAction, HighPriorityActi
     final InspectionProfileImpl rootProfile = (InspectionProfileImpl)InspectionProfileManager.getInstance().getRootProfile();
     LinkedHashSet<InspectionProfileEntry> allEntries = new LinkedHashSet<InspectionProfileEntry>();
     allEntries.add(baseTool);
-    GlobalInspectionContextImpl.collectDependentInspections(baseTool, allEntries, rootProfile);
+    rootProfile.collectDependentInspections(baseTool, allEntries);
     InspectionProfileEntry[] toolsArray = allEntries.toArray(new InspectionProfileEntry[allEntries.size()]);
     final InspectionProfileImpl model = InspectionProfileImpl.createSimple(baseTool.getDisplayName(), toolsArray);
     try {
@@ -133,6 +123,7 @@ public class RunInspectionIntention implements IntentionAction, HighPriorityActi
     return inspectionContext;
   }
 
+  @Override
   public boolean startInWriteAction() {
     return false;
   }

@@ -32,6 +32,8 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.projectRoots.JavaSdkVersion;
+import com.intellij.openapi.projectRoots.JavaVersionService;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Condition;
@@ -52,7 +54,11 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.templateLanguages.OuterLanguageElement;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.*;
-import com.intellij.util.*;
+import com.intellij.refactoring.util.RefactoringChangeUtil;
+import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
+import com.intellij.util.Function;
+import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.xml.util.XmlStringUtil;
@@ -1357,9 +1363,9 @@ public class HighlightUtil extends HighlightUtilBase {
       }
     }
 
-    final PsiClass aClass;
+    PsiClass aClass;
     if (qualifier != null) {
-      final PsiElement resolved = qualifier.resolve();
+      PsiElement resolved = qualifier.advancedResolve(true).getElement();
       if (resolved != null && !(resolved instanceof PsiClass)) {
         String description = JavaErrorMessages.message("class.expected");
         return HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(qualifier).descriptionAndTooltip(description).create();
@@ -1378,7 +1384,7 @@ public class HighlightUtil extends HighlightUtilBase {
 
     if (expr instanceof PsiThisExpression) {
       final PsiMethod psiMethod = PsiTreeUtil.getParentOfType(expr, PsiMethod.class);
-      if (psiMethod == null || psiMethod.getContainingClass() != aClass) {
+      if (psiMethod == null || psiMethod.getContainingClass() != aClass && !isInsideDefaultMethod(psiMethod, aClass)) {
         if (aClass.isInterface()) {
           return thisNotFoundInInterfaceInfo(expr);
         }
@@ -1392,6 +1398,13 @@ public class HighlightUtil extends HighlightUtilBase {
       }
     }
     return null;
+  }
+
+  private static boolean isInsideDefaultMethod(PsiMethod method, PsiClass aClass) {
+    while (method != null && method.getContainingClass() != aClass) {
+      method = PsiTreeUtil.getParentOfType(method, PsiMethod.class, true);
+    }
+    return method != null && method.hasModifierProperty(PsiModifier.DEFAULT);
   }
 
   private static HighlightInfo thisNotFoundInInterfaceInfo(@NotNull PsiExpression expr) {
@@ -1799,9 +1812,9 @@ public class HighlightUtil extends HighlightUtilBase {
         return HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(typeElement).descriptionAndTooltip(description).create();
       }
     }
+
     return null;
   }
-
 
   @Nullable
   public static HighlightInfo checkIllegalVoidType(@NotNull PsiKeyword type) {
@@ -1810,15 +1823,17 @@ public class HighlightUtil extends HighlightUtilBase {
     PsiElement parent = type.getParent();
     if (parent instanceof PsiTypeElement) {
       PsiElement typeOwner = parent.getParent();
-      if (typeOwner instanceof PsiMethod) {
-        if (((PsiMethod)typeOwner).getReturnTypeElement() == parent) return null;
-      }
-      else if (// like in Class c = void.class;
-        typeOwner instanceof PsiClassObjectAccessExpression &&
-        TypeConversionUtil.isVoidType(((PsiClassObjectAccessExpression)typeOwner).getOperand().getType()) ||
+      if (typeOwner != null) {
         // do not highlight incomplete declarations
-        typeOwner != null && PsiUtilCore.hasErrorElementChild(typeOwner)) {
-        return null;
+        if (PsiUtilCore.hasErrorElementChild(typeOwner)) return null;
+      }
+
+      if (typeOwner instanceof PsiMethod) {
+        PsiMethod method = (PsiMethod)typeOwner;
+        if (method.getReturnTypeElement() == parent && PsiType.VOID.equals(method.getReturnType())) return null;
+      }
+      else if (typeOwner instanceof PsiClassObjectAccessExpression) {
+        if (TypeConversionUtil.isVoidType(((PsiClassObjectAccessExpression)typeOwner).getOperand().getType())) return null;
       }
       else if (typeOwner instanceof JavaCodeFragment) {
         if (typeOwner.getUserData(PsiUtil.VALID_VOID_TYPE_IN_CODE_FRAGMENT) != null) return null;
@@ -1845,7 +1860,7 @@ public class HighlightUtil extends HighlightUtilBase {
       type = qualifier instanceof PsiExpression ? ((PsiExpression)qualifier).getType() : null;
       referencedClass = PsiUtil.resolveClassInType(type);
 
-      boolean isSuperCall = isSuperMethodCall(expression.getParent());
+      boolean isSuperCall = RefactoringChangeUtil.isSuperMethodCall(expression.getParent());
       if (resolved == null && isSuperCall) {
         if (qualifier instanceof PsiReferenceExpression) {
           resolved = ((PsiReferenceExpression)qualifier).resolve();
@@ -1939,7 +1954,7 @@ public class HighlightUtil extends HighlightUtilBase {
     PsiElement element = expression.getParent();
     while (element != null) {
       // check if expression inside super()/this() call
-      if (isSuperOrThisMethodCall(element)) {
+      if (RefactoringChangeUtil.isSuperOrThisMethodCall(element)) {
         PsiElement parentClass = new PsiMatcherImpl(element)
           .parent(PsiMatchers.hasClass(PsiExpressionStatement.class))
           .parent(PsiMatchers.hasClass(PsiCodeBlock.class))
@@ -1995,7 +2010,8 @@ public class HighlightUtil extends HighlightUtilBase {
 
   @Nullable
   public static HighlightInfo checkImplicitThisReferenceBeforeSuper(@NotNull PsiClass aClass) {
-    if (aClass instanceof PsiAnonymousClass) return null;
+    if (JavaVersionService.getInstance().isAtLeast(aClass, JavaSdkVersion.JDK_1_7)) return null;
+    if (aClass instanceof PsiAnonymousClass || aClass instanceof PsiTypeParameter) return null;
     PsiClass superClass = aClass.getSuperClass();
     if (superClass == null || !PsiUtil.isInnerClass(superClass)) return null;
     PsiClass outerClass = superClass.getContainingClass();
@@ -2030,23 +2046,6 @@ public class HighlightUtil extends HighlightUtilBase {
       .dot(PsiMatchers.hasText(PsiKeyword.SUPER))
       .getElement();
     return element != null;
-  }
-
-  @Nullable
-  private static String getMethodExpressionName(@Nullable PsiElement element) {
-    if (!(element instanceof PsiMethodCallExpression)) return null;
-    PsiReferenceExpression methodExpression = ((PsiMethodCallExpression)element).getMethodExpression();
-    return methodExpression.getReferenceName();
-  }
-
-  public static boolean isSuperOrThisMethodCall(@Nullable PsiElement element) {
-    String name = getMethodExpressionName(element);
-    return PsiKeyword.SUPER.equals(name) || PsiKeyword.THIS.equals(name);
-  }
-
-  public static boolean isSuperMethodCall(@Nullable PsiElement element) {
-    String name = getMethodExpressionName(element);
-    return PsiKeyword.SUPER.equals(name);
   }
 
   private static boolean thisOrSuperReference(@Nullable PsiExpression qualifierExpression, PsiClass aClass) {
@@ -2626,6 +2625,19 @@ public class HighlightUtil extends HighlightUtilBase {
       QuickFixAction.registerQuickFixAction(highlightInfo, new RemoveParameterListFix((PsiMethod)parent));
       return highlightInfo;
     }
+    return null;
+  }
+
+  @Nullable
+  static HighlightInfo checkForStatement(@NotNull PsiForStatement statement) {
+    PsiStatement init = statement.getInitialization();
+    if (!(init == null || init instanceof PsiEmptyStatement ||
+          init instanceof PsiDeclarationStatement ||
+          init instanceof PsiExpressionStatement || init instanceof PsiExpressionListStatement)) {
+      String message = JavaErrorMessages.message("invalid.statement");
+      return HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(init).descriptionAndTooltip(message).create();
+    }
+
     return null;
   }
 

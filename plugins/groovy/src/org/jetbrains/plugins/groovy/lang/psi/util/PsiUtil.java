@@ -80,6 +80,7 @@ import org.jetbrains.plugins.groovy.lang.psi.dataFlow.types.TypeInferenceHelper;
 import org.jetbrains.plugins.groovy.lang.psi.impl.*;
 import org.jetbrains.plugins.groovy.lang.psi.impl.signatures.GrClosureSignatureUtil;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
+import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GrBindingVariable;
 import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GroovyScriptClass;
 import org.jetbrains.plugins.groovy.lang.psi.typeEnhancers.ClosureParameterEnhancer;
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil;
@@ -1031,6 +1032,8 @@ public class PsiUtil {
   }
 
   public static boolean isExpressionStatement(@NotNull PsiElement expr) {
+    if (!(expr instanceof GrStatement)) return false;
+
     final PsiElement parent = expr.getParent();
     if (parent instanceof GrControlFlowOwner || parent instanceof GrCaseSection) return true;
     if (parent instanceof GrIfStatement &&
@@ -1301,5 +1304,9 @@ public class PsiUtil {
     return e != null &&
            TokenSets.WHITE_SPACES_SET.contains(e.getNode().getElementType()) &&
            (e.getText().indexOf('\n') >= 0 || e.getText().indexOf('\r') >= 0);
+  }
+
+  public static boolean isSingleBindingVariant(GroovyResolveResult[] candidates) {
+    return candidates.length == 1 && candidates[0].getElement() instanceof GrBindingVariable;
   }
 }

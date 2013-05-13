@@ -222,11 +222,13 @@ public class CodeCompletionHandlerBase {
     Document document = editor.getDocument();
     int docLength = document.getTextLength();
     int psiLength = psiFile.getTextLength();
-    if (docLength == psiLength) {
+    boolean committed = !PsiDocumentManager.getInstance(psiFile.getProject()).isUncommited(document);
+    if (docLength == psiLength && committed) {
       return;
     }
 
     String message = "unsuccessful commit: (injected=" +(editor instanceof EditorWindow) +")";
+    message += "\ncommitted=" + committed;
     message += "\nfile=" + psiFile.getName();
     message += "\nfile class=" + psiFile.getClass();
     message += "\nlanguage=" + psiFile.getLanguage();
@@ -279,11 +281,9 @@ public class CodeCompletionHandlerBase {
 
     for (CompletionConfidence confidence : CompletionConfidenceEP.forLanguage(language)) {
       final ThreeState result = confidence.shouldSkipAutopopup(elementAt, psiFile, offset);
-      if (result == ThreeState.YES) {
-        return true;
-      }
-      if (result == ThreeState.NO) {
-        return false;
+      if (result != ThreeState.UNSURE) {
+        LOG.debug(confidence + " has returned shouldSkipAutopopup=" + result);
+        return result == ThreeState.YES;
       }
     }
     return false;
@@ -508,7 +508,8 @@ public class CodeCompletionHandlerBase {
                                      final boolean hasModifiers,
                                      final int invocationCount) {
     final PsiFile originalFile = initContext.getFile();
-    final PsiFile hostFile = InjectedLanguageUtil.getTopLevelFile(originalFile);
+    InjectedLanguageManager manager = InjectedLanguageManager.getInstance(originalFile.getProject());
+    final PsiFile hostFile = manager.getTopLevelFile(originalFile);
     final Editor hostEditor = InjectedLanguageUtil.getTopLevelEditor(initContext.getEditor());
     final OffsetMap hostMap = translateOffsetMapToHost(initContext, originalFile, hostFile, hostEditor);
 

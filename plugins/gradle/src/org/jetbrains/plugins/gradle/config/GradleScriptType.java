@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,12 +21,11 @@ import com.intellij.execution.*;
 import com.intellij.execution.configurations.JavaParameters;
 import com.intellij.execution.configurations.RunProfile;
 import com.intellij.openapi.components.ServiceManager;
+import com.intellij.openapi.externalSystem.util.ExternalSystemConstants;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
-import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.OrderEnumerator;
-import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
@@ -41,13 +40,8 @@ import icons.GradleIcons;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.gradle.execution.GradleTaskLocation;
-import org.jetbrains.plugins.gradle.model.gradle.GradleTaskDescriptor;
-import org.jetbrains.plugins.gradle.tasks.GradleTasksList;
-import org.jetbrains.plugins.gradle.ui.GradleDataKeys;
-import org.jetbrains.plugins.gradle.util.GradleBundle;
 import org.jetbrains.plugins.gradle.util.GradleConstants;
-import org.jetbrains.plugins.gradle.util.GradleInstallationManager;
-import org.jetbrains.plugins.gradle.util.GradleUtil;
+import org.jetbrains.plugins.gradle.service.GradleInstallationManager;
 import org.jetbrains.plugins.groovy.config.GroovyConfigUtils;
 import org.jetbrains.plugins.groovy.extensions.GroovyScriptType;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFile;
@@ -60,7 +54,6 @@ import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.arithme
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 import org.jetbrains.plugins.groovy.runner.GroovyScriptRunConfiguration;
 import org.jetbrains.plugins.groovy.runner.GroovyScriptRunner;
-import org.jetbrains.plugins.groovy.util.GroovyUtils;
 
 import javax.swing.*;
 import java.io.File;
@@ -177,29 +170,32 @@ public class GradleScriptType extends GroovyScriptType {
           GroovyScriptRunConfiguration configuration = (GroovyScriptRunConfiguration)profile;
           String parameters = configuration.getScriptParameters();
           if (parameters != null) {
-            GradleTasksList list = GradleUtil.getToolWindowElement(GradleTasksList.class, project, GradleDataKeys.RECENT_TASKS_LIST);
-            if (list != null) {
-              GradleTaskDescriptor descriptor = new GradleTaskDescriptor(parameters, null);
-              descriptor.setExecutorId(executor.getId());
-              list.setFirst(descriptor);
-              GradleLocalSettings.getInstance(project).setRecentTasks(list.getModel().getTasks());
-            }
+            // TODO den implement
+//            GradleTasksList list = GradleUtil.getToolWindowElement(GradleTasksList.class, project, ExternalSystemDataKeys.RECENT_TASKS_LIST);
+//            if (list != null) {
+//              ExternalSystemTaskDescriptor descriptor = new ExternalSystemTaskDescriptor(parameters, null);
+//              descriptor.setExecutorId(executor.getId());
+//              list.setFirst(descriptor);
+//              GradleLocalSettings.getInstance(project).setRecentTasks(list.getModel().getTasks());
+//            }
           }
         }
         final GradleInstallationManager libraryManager = ServiceManager.getService(GradleInstallationManager.class);
-        if (libraryManager.getGradleHome(module, project) == null) {
-          int result = Messages.showOkCancelDialog(
-            GradleBundle.message("gradle.run.no.sdk.text"),
-            GradleBundle.message("gradle.run.no.sdk.title"),
-            GradleIcons.Gradle
-          );
-          if (result == 0) {
-            ShowSettingsUtil.getInstance().editConfigurable(project, new GradleConfigurable(project));
-          }
-          if (libraryManager.getGradleHome(module, project) == null) {
-            return false;
-          }
-        }
+        // TODO den implement
+        //if (libraryManager.getGradleHome(module, project) == null) {
+        //  int result = 0;
+//          int result = Messages.showOkCancelDialog(
+//            ExternalSystemBundle.message("gradle.run.no.sdk.text"),
+//            ExternalSystemBundle.message("gradle.run.no.sdk.title"),
+//            GradleIcons.Gradle
+//          );
+//          if (result == 0) {
+//            ShowSettingsUtil.getInstance().editConfigurable(project, new AbstractExternalProjectConfigurable(project));
+//          }
+//          if (libraryManager.getGradleHome(module, project) == null) {
+//            return false;
+//          }
+//        }
         return true;
       }
 
@@ -214,15 +210,24 @@ public class GradleScriptType extends GroovyScriptType {
         String scriptParameters = configuration.getScriptParameters();
 
         final GradleInstallationManager libraryManager = ServiceManager.getService(GradleInstallationManager.class);
-        final VirtualFile gradleHome = libraryManager.getGradleHome(module, project);
+        if (module == null) {
+          throw new CantRunException("Target module is undefined");
+        }
+        String linkedProjectPath = module.getOptionValue(ExternalSystemConstants.LINKED_PROJECT_PATH_KEY);
+        if (StringUtil.isEmpty(linkedProjectPath)) {
+          throw new CantRunException(String.format("Module '%s' is not backed by gradle", module.getName()));
+        }
+        assert linkedProjectPath != null;
+        final VirtualFile gradleHome = libraryManager.getGradleHome(module, project, linkedProjectPath);
         assert gradleHome != null;
 
         params.setMainClass(findMainClass(gradleHome, script, project));
 
-        final File[] groovyJars = GroovyUtils.getFilesInDirectoryByPattern(gradleHome.getPath() + "/lib/", GroovyConfigUtils.GROOVY_ALL_JAR_PATTERN);
+        final File[] groovyJars = GroovyConfigUtils.getGroovyAllJars(gradleHome.getPath() + "/lib/");
         if (groovyJars.length > 0) {
           params.getClassPath().add(groovyJars[0].getAbsolutePath());
-        } else if (module != null) {
+        }
+        else {
           final VirtualFile groovyJar = findGroovyJar(module);
           if (groovyJar != null) {
             params.getClassPath().add(groovyJar);

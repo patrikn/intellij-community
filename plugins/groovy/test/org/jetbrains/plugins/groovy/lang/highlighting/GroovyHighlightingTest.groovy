@@ -1177,4 +1177,196 @@ def <error descr="Illegal escape character in string literal">'a\\obc'</error>()
       }
     ''')
   }
+
+  void testDuplicatingAnnotations() {
+    testHighlighting('''\
+@interface A {
+  String value()
+}
+
+@A('a')
+@A('a')
+class X{}
+
+@A('a')
+@A('ab')
+class Y{}
+
+<error descr="Duplicate modifier 'public'">public public</error> class Z {}
+''')
+  }
+
+  void testAnnotationAttribute() {
+    testHighlighting('''\
+@interface A {
+  String value() default 'a'
+  String[] values() default []
+}
+
+
+@A('abc')
+def x
+
+@A(<error descr="Expected ''abc' + 'cde'' to be an inline constant">'abc' + 'cde'</error>)
+def y
+
+class C {
+  final static String CONST1 = 'ABC'
+  final static String CONST2 = 'ABC' + 'CDE'
+  final        String CONST3 = 'ABC'
+}
+
+@A(C.CONST1)
+def z
+
+@A(<error descr="Expected ''ABC' + 'CDE'' to be an inline constant">C.CONST2</error>)
+def a
+
+@A(C.CONST3)
+def b
+
+@A(values=['a'])
+def c
+
+@A(values=<error descr="Expected ''a'+'b'' to be an inline constant">['a'+'b']</error>)
+def d
+
+@A(values=[C.CONST1])
+def e
+
+@A(values=<error descr="Expected ''ABC' + 'CDE'' to be an inline constant">[C.CONST1, C.CONST2]</error>)
+def f
+
+@interface X {
+  Class value()
+}
+
+@X(String.class)
+def g
+''')
+  }
+
+  void testDuplicateMethodsWithGenerics() {
+    testHighlighting('''\
+class A<T, E> {
+  <error descr="Method with signature foo(Object) is already defined in the class 'A'">def foo(T t)</error> {}
+  <error descr="Method with signature foo(Object) is already defined in the class 'A'">def foo(E e)</error> {}
+}
+
+class B {
+  <error descr="Method with signature foo(Object) is already defined in the class 'B'">def <T> void foo(T t)</error> {}
+  <error descr="Method with signature foo(Object) is already defined in the class 'B'">def <E> void foo(E e)</error> {}
+}
+
+class C<T, E> {
+  <error descr="Method with signature foo(Object) is already defined in the class 'C'">def foo(T t, T t2 = null)</error> {}
+  <error descr="Method with signature foo(Object) is already defined in the class 'C'">def foo(E e)</error> {}
+}
+
+class D<T, E> {
+  <error descr="Method with signature foo(Object, Object) is already defined in the class 'D'">def foo(T t, E e)</error> {}
+  <error descr="Method with signature foo(Object, Object) is already defined in the class 'D'">def foo(E t, T e)</error> {}
+  def foo(E t) {}
+}''')
+  }
+
+  void testOverriddenReturnType0() {
+    myFixture.addClass('class Base{}')
+    myFixture.addClass('class Inh extends Base{}')
+    testHighlighting('''\
+class A {
+  List<Base> foo() {}
+}
+
+class B extends A {
+  List<Inh> foo() {} //correct
+}
+''')
+  }
+
+  void testOverriddenReturnType1() {
+    myFixture.addClass('class Base extends SuperBase {}')
+    myFixture.addClass('class Inh extends Base{}')
+    testHighlighting('''\
+class A {
+  List<Base> foo() {}
+}
+
+class B extends A {
+  <error>Collection<Base></error> foo() {}
+}
+''')
+  }
+
+  void testOverriddenReturnType2() {
+    myFixture.addClass('class Base extends SuperBase {}')
+    myFixture.addClass('class Inh extends Base{}')
+    testHighlighting('''\
+class A {
+  List<Base> foo() {}
+}
+
+class B extends A {
+  <error>int</error> foo() {}
+}
+''')
+  }
+
+  void testOverriddenReturnType3() {
+    myFixture.addClass('class Base extends SuperBase {}')
+    myFixture.addClass('class Inh extends Base{}')
+    testHighlighting('''\
+class A {
+  Base[] foo() {}
+}
+
+class B extends A {
+  <error>Inh[]</error> foo() {}
+}
+''')
+  }
+
+  void testOverriddenReturnType4() {
+    myFixture.addClass('class Base extends SuperBase {}')
+    myFixture.addClass('class Inh extends Base{}')
+    testHighlighting('''\
+class A {
+  Base[] foo() {}
+}
+
+class B extends A {
+  Base[] foo() {}
+}
+''')
+  }
+
+  void testEnumConstantAsAnnotationAttribute() {
+    testHighlighting('''\
+enum A {CONST}
+
+@interface I {
+    A foo()
+}
+
+@I(foo = A.CONST) //no error
+def bar
+''')
+  }
+
+  void testUnassignedFieldAsAnnotationAttribute() {
+    testHighlighting('''\
+interface A {
+  String CONST
+}
+
+@interface I {
+    String foo()
+}
+
+@I(foo = <error descr="Expected 'A.CONST' to be an inline constant">A.CONST</error>)
+def bar
+''')
+  }
+
+
 }

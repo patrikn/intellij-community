@@ -76,6 +76,10 @@ public abstract class RadComponent extends PropertiesContainer {
     return myParent;
   }
 
+  public final <T extends RadComponent> T getParent(Class<T> clazz) {
+    return (T)myParent;
+  }
+
   public final void setParent(RadComponent parent) {
     myParent = parent;
   }
@@ -405,19 +409,23 @@ public abstract class RadComponent extends PropertiesContainer {
 
   public void accept(RadComponentVisitor visitor, boolean forward) {
     if (visitor.visit(this)) {
-      List<RadComponent> children = getChildrenForAccept(visitor);
-      if (forward) {
-        for (RadComponent child : children) {
-          child.accept(visitor, forward);
-        }
-      }
-      else {
-        int size = children.size();
-        for (int i = size - 1; i >= 0; i--) {
-          children.get(i).accept(visitor, forward);
-        }
-      }
+      acceptChildren(visitor, forward);
       visitor.endVisit(this);
+    }
+  }
+
+  public void acceptChildren(RadComponentVisitor visitor, boolean forward) {
+    List<RadComponent> children = getChildrenForAccept(visitor);
+    if (forward) {
+      for (RadComponent child : children) {
+        child.accept(visitor, forward);
+      }
+    }
+    else {
+      int size = children.size();
+      for (int i = size - 1; i >= 0; i--) {
+        children.get(i).accept(visitor, forward);
+      }
     }
   }
 

@@ -71,7 +71,9 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.util.*;
 
 public class GlobalInspectionContextImpl extends UserDataHolderBase implements GlobalInspectionContext {
@@ -361,7 +363,7 @@ public class GlobalInspectionContextImpl extends UserDataHolderBase implements G
 
           getRefManager().iterate(new RefVisitor() {
             @Override
-            public void visitElement(final RefEntity refEntity) {
+            public void visitElement(@NotNull final RefEntity refEntity) {
               for (Element element : globalTools.keySet()) {
                 final Tools tools = globalTools.get(element);
                 for (ScopeToolState state : tools.getTools()) {
@@ -375,7 +377,7 @@ public class GlobalInspectionContextImpl extends UserDataHolderBase implements G
               }
             }
           });
-          
+
           for (Element element : globalTools.keySet()) {
             final String toolName = globalTools.get(element).getShortName();
             element.setAttribute(LOCAL_TOOL_ATTRIBUTE, Boolean.toString(false));
@@ -385,7 +387,14 @@ public class GlobalInspectionContextImpl extends UserDataHolderBase implements G
               new File(outputPath).mkdirs();
               final File file = new File(outputPath, toolName + ext);
               inspectionsResults.add(file);
-              JDOMUtil.writeDocument(doc, file, "\n");
+
+              OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(file), "UTF-8");
+              try {
+                JDOMUtil.writeDocument(doc, writer, "\n");
+              }
+              finally {
+                writer.close();
+              }
             }
             catch (IOException e) {
               LOG.error(e);
@@ -670,7 +679,7 @@ public class GlobalInspectionContextImpl extends UserDataHolderBase implements G
 
     return new GlobalInspectionToolWrapper(toolWrapper.getTool()) {
       @Override
-      public void addProblemElement(RefEntity refEntity, CommonProblemDescriptor... commonProblemDescriptors) {
+      public void addProblemElement(RefEntity refEntity, @NotNull CommonProblemDescriptor... commonProblemDescriptors) {
         for (CommonProblemDescriptor problemDescriptor : commonProblemDescriptors) {
           if (problemDescriptor instanceof ProblemDescriptor) {
             String problemGroup = ((ProblemDescriptor)problemDescriptor).getProblemGroup();
@@ -742,32 +751,12 @@ public class GlobalInspectionContextImpl extends UserDataHolderBase implements G
     }
   }
 
-  public static void collectDependentInspections(@NotNull InspectionProfileEntry profileEntry,
-                                                 @NotNull Set<InspectionProfileEntry> dependentEntries,
-                                                 @NotNull InspectionProfileImpl rootProfile) {
-    String mainToolId = profileEntry.getMainToolId();
-
-    if (mainToolId != null) {
-      InspectionProfileEntry dependentEntry = rootProfile.getInspectionTool(mainToolId);
-
-      if (dependentEntry != null) {
-        if (!dependentEntries.contains(dependentEntry)) {
-          dependentEntries.add(dependentEntry);
-          collectDependentInspections(dependentEntry, dependentEntries, rootProfile);
-        }
-      }
-      else {
-        LOG.error("Can't find main tool: " + mainToolId);
-      }
-    }
-  }
-
   protected List<ToolsImpl> getUsedTools() {
     InspectionProfileImpl profile = new InspectionProfileImpl((InspectionProfileImpl)getCurrentProfile());
     List<ToolsImpl> tools = profile.getAllEnabledInspectionTools(myProject);
     Set<InspectionProfileEntry> dependentTools = new LinkedHashSet<InspectionProfileEntry>();
     for (ToolsImpl tool : tools) {
-      collectDependentInspections(tool.getTool(), dependentTools, profile);
+      profile.collectDependentInspections(tool.getTool(), dependentTools);
     }
 
     if (!dependentTools.isEmpty()) {
@@ -775,7 +764,7 @@ public class GlobalInspectionContextImpl extends UserDataHolderBase implements G
       set.addAll(ContainerUtil.map(dependentTools, new Function<InspectionProfileEntry, ToolsImpl>() {
         @Override
         public ToolsImpl fun(InspectionProfileEntry entry) {
-          return new ToolsImpl(entry, entry.getDefaultLevel(), true);
+          return new ToolsImpl(entry, entry.getDefaultLevel(), true, true);
         }
       }));
       return new ArrayList<ToolsImpl>(set);

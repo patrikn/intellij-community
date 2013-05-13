@@ -19,6 +19,7 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ex.ApplicationEx;
 import com.intellij.openapi.components.ApplicationComponent;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.util.LowMemoryWatcher;
 import com.intellij.openapi.util.ShutDownTracker;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.*;
@@ -68,6 +69,13 @@ public class PersistentFSImpl extends PersistentFS implements ApplicationCompone
   // the root of all roots. All roots in myRoots and myRootsById maps are children of this super root. guarded by myRootsLock
   @Nullable private volatile VirtualFileSystemEntry mySuperRoot;
   private boolean myShutDown = false;
+  @SuppressWarnings("UnusedDeclaration")
+  private final LowMemoryWatcher myLowMemoryWatcher = LowMemoryWatcher.register(new Runnable() {
+    @Override
+    public void run() {
+      clearIdCache();
+    }
+  });
 
   public PersistentFSImpl(@NotNull final MessageBus bus) {
     myEventsBus = bus;
@@ -306,7 +314,8 @@ public class PersistentFSImpl extends PersistentFS implements ApplicationCompone
     FSRecords.setFlags(id, (attributes.isDirectory() ? IS_DIRECTORY_FLAG : 0) |
                            (attributes.isWritable() ? 0 : IS_READ_ONLY) |
                            (attributes.isSymLink() ? IS_SYMLINK : 0) |
-                           (attributes.isSpecial() ? IS_SPECIAL : 0), true);
+                           (attributes.isSpecial() ? IS_SPECIAL : 0) |
+                           (attributes.isHidden() ? IS_HIDDEN : 0), true);
 
     return true;
   }
@@ -373,8 +382,13 @@ public class PersistentFSImpl extends PersistentFS implements ApplicationCompone
   }
 
   @Override
-  public boolean isWritable(@NotNull final VirtualFile file) {
+  public boolean isWritable(@NotNull VirtualFile file) {
     return (getFileAttributes(getFileId(file)) & IS_READ_ONLY) == 0;
+  }
+
+  @Override
+  public boolean isHidden(@NotNull VirtualFile file) {
+    return (getFileAttributes(getFileId(file)) & IS_HIDDEN) != 0;
   }
 
   @Override
@@ -813,7 +827,7 @@ public class PersistentFSImpl extends PersistentFS implements ApplicationCompone
             char[] chars = new char[rootPathLength];
 
             position[0] = copyString(chars, position[0], fakeName);
-        
+
             return chars;
           }
         };
@@ -846,11 +860,11 @@ public class PersistentFSImpl extends PersistentFS implements ApplicationCompone
             char[] chars = new char[rootPathLength];
 
             position[0] = copyString(chars, position[0], name);
-        
+
             if (appendSlash) {
               chars[position[0]++] = '/';
             }
-        
+
             return chars;
           }
         };
@@ -1036,6 +1050,9 @@ public class PersistentFSImpl extends PersistentFS implements ApplicationCompone
         else if (VirtualFile.PROP_WRITABLE.equals(propertyChangeEvent.getPropertyName())) {
           executeSetWritable(propertyChangeEvent.getFile(), ((Boolean)propertyChangeEvent.getNewValue()).booleanValue());
         }
+        else if (VirtualFile.PROP_HIDDEN.equals(propertyChangeEvent.getPropertyName())) {
+          executeSetHidden(propertyChangeEvent.getFile(), ((Boolean)propertyChangeEvent.getNewValue()).booleanValue());
+        }
       }
     }
     catch (Exception e) {
@@ -1147,6 +1164,10 @@ public class PersistentFSImpl extends PersistentFS implements ApplicationCompone
 
   private static void executeSetWritable(@NotNull VirtualFile file, final boolean writableFlag) {
     setFlag(file, IS_READ_ONLY, !writableFlag);
+  }
+
+  private static void executeSetHidden(@NotNull VirtualFile file, final boolean hiddenFlag) {
+    setFlag(file, IS_HIDDEN, hiddenFlag);
   }
 
   private static void setFlag(@NotNull VirtualFile file, int mask, boolean value) {

@@ -193,6 +193,7 @@ public class JavaBuilder extends ModuleLevelBuilder {
       throw e;
     }
     catch (Exception e) {
+      LOG.info(e);
       String message = e.getMessage();
       if (message == null) {
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -206,7 +207,7 @@ public class JavaBuilder extends ModuleLevelBuilder {
         message = "Internal error: \n" + out.toString();
       }
       context.processMessage(new CompilerMessage(BUILDER_NAME, BuildMessage.Kind.ERROR, message));
-      throw new ProjectBuildException(message, e);
+      throw new StopBuildException();
     }
   }
 
@@ -285,7 +286,7 @@ public class JavaBuilder extends ModuleLevelBuilder {
           if (!compiledOk) {
             diagnosticSink.report(new PlainMessageDiagnostic(Diagnostic.Kind.OTHER, "Errors occurred while compiling module '" + chunkName + "'"));
           }
-          throw new ProjectBuildException(
+          throw new StopBuildException(
             "Compilation failed: errors: " + diagnosticSink.getErrorCount() + "; warnings: " + diagnosticSink.getWarningCount()
           );
         }
@@ -391,7 +392,7 @@ public class JavaBuilder extends ModuleLevelBuilder {
     return JavaCompilers.ECLIPSE_ID.equalsIgnoreCase(compilerId) || JavaCompilers.ECLIPSE_EMBEDDED_ID.equalsIgnoreCase(compilerId);
   }
 
-  private void submitAsyncTask(CompileContext context, final Runnable taskRunnable) {
+  private void submitAsyncTask(final CompileContext context, final Runnable taskRunnable) {
     final TasksCounter counter = COUNTER_KEY.get(context);
 
     assert counter != null;
@@ -401,6 +402,9 @@ public class JavaBuilder extends ModuleLevelBuilder {
       public void run() {
         try {
           taskRunnable.run();
+        }
+        catch (Throwable e) {
+          context.processMessage(new CompilerMessage(BUILDER_NAME, e));
         }
         finally {
           counter.decTaskCounter();
@@ -504,6 +508,7 @@ public class JavaBuilder extends ModuleLevelBuilder {
 
   private static final Key<List<String>> JAVAC_OPTIONS = Key.create("_javac_options_");
   private static final Key<List<String>> JAVAC_VM_OPTIONS = Key.create("_javac_vm_options_");
+  private static final Key<String> USER_DEFINED_BYTECODE_TARGET = Key.create("_user_defined_bytecode_target_");
 
   private static List<String> getCompilationVMOptions(CompileContext context) {
     List<String> cached = JAVAC_VM_OPTIONS.get(context);
@@ -577,6 +582,13 @@ public class JavaBuilder extends ModuleLevelBuilder {
         }
       }
     }
+    
+    if (bytecodeTarget == null) {
+      // last resort and backward compatibility: 
+      // check if user explicitly defined bytecode target in additional compiler options
+      bytecodeTarget = USER_DEFINED_BYTECODE_TARGET.get(context);
+    }
+    
     if (bytecodeTarget != null) {
       options.add("-target");
       options.add(bytecodeTarget);
@@ -681,13 +693,22 @@ public class JavaBuilder extends ModuleLevelBuilder {
     if (customArgs != null) {
       final StringTokenizer customOptsTokenizer = new StringTokenizer(customArgs, " \t\r\n");
       boolean skip = false;
+      boolean targetOptionFound = false;
       while (customOptsTokenizer.hasMoreTokens()) {
         final String userOption = customOptsTokenizer.nextToken();
         if (FILTERED_OPTIONS.contains(userOption)) {
           skip = true;
+          targetOptionFound = "-target".equals(userOption);
           continue;
         }
-        if (!skip) {
+        if (skip) {
+          skip = false;
+          if (targetOptionFound) {
+            targetOptionFound = false;
+            USER_DEFINED_BYTECODE_TARGET.set(context, userOption);
+          }
+        }
+        else {
           if (!FILTERED_SINGLE_OPTIONS.contains(userOption)) {
             if (userOption.startsWith("-J-")) {
               vmOptions.add(userOption.substring("-J".length()));

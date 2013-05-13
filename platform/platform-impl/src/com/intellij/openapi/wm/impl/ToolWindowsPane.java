@@ -19,6 +19,7 @@ import com.intellij.ide.ui.UISettings;
 import com.intellij.ide.ui.UISettingsListener;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Splitter;
 import com.intellij.openapi.ui.ThreeComponentsSplitter;
 import com.intellij.openapi.util.Disposer;
@@ -38,7 +39,6 @@ import com.intellij.util.ui.UIUtil;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ComponentEvent;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -160,7 +160,7 @@ public final class ToolWindowsPane extends JBLayeredPane implements Disposable {
       myRightStripe.setBounds(size.width - rightSize.width, topSize.height, rightSize.width, size.height - topSize.height - bottomSize.height);
       myBottomStripe.setBounds(0, size.height - bottomSize.height, size.width, bottomSize.height);
 
-      if (UISettings.getInstance().HIDE_TOOL_STRIPES) {
+      if (UISettings.getInstance().HIDE_TOOL_STRIPES || UISettings.getInstance().PRESENTATION_MODE) {
         myLayeredPane.setBounds(0, 0, size.width, size.height);
       } else {
         myLayeredPane.setBounds(leftSize.width, topSize.height, size.width - leftSize.width - rightSize.width, size.height - topSize.height - bottomSize.height);
@@ -191,6 +191,10 @@ public final class ToolWindowsPane extends JBLayeredPane implements Disposable {
       Disposer.dispose(myDisposable);
     }
     super.removeNotify();
+  }
+
+  public Project getProject() {
+    return myFrame.getProject();
   }
 
   /**
@@ -384,7 +388,7 @@ public final class ToolWindowsPane extends JBLayeredPane implements Disposable {
   private void updateToolStripesVisibility(){
     boolean oldVisible = myLeftStripe.isVisible();
 
-    final boolean showButtons = !UISettings.getInstance().HIDE_TOOL_STRIPES;
+    final boolean showButtons = !UISettings.getInstance().HIDE_TOOL_STRIPES && !UISettings.getInstance().PRESENTATION_MODE;
     boolean visible = showButtons || myStripesOverlayed;
     myLeftStripe.setVisible(visible);
     myRightStripe.setVisible(visible);
@@ -1005,7 +1009,7 @@ public final class ToolWindowsPane extends JBLayeredPane implements Disposable {
     }
   }
 
-  private final class MyLayeredPane extends JLayeredPane{
+  private final class MyLayeredPane extends JBLayeredPane {
     /*
      * These images are used to perform animated showing and hiding of components.
      * They are the member for performance reason.
@@ -1018,8 +1022,6 @@ public final class ToolWindowsPane extends JBLayeredPane implements Disposable {
       myTopImageRef=new SoftReference<BufferedImage>(null);
       setOpaque(!UIUtil.isUnderDarcula());
       add(splitter,JLayeredPane.DEFAULT_LAYER);
-      splitter.setBounds(0,0,getWidth(),getHeight());
-      enableEvents(ComponentEvent.COMPONENT_EVENT_MASK);
     }
 
     @Override
@@ -1067,8 +1069,7 @@ public final class ToolWindowsPane extends JBLayeredPane implements Disposable {
     /**
      * When component size becomes larger then bottom and top images should be enlarged.
      */
-    protected final void processComponentEvent(final ComponentEvent e) {
-      if(ComponentEvent.COMPONENT_RESIZED==e.getID()){
+    public void doLayout() {
         final int width=getWidth();
         final int height=getHeight();
         if(width<0||height<0){
@@ -1102,11 +1103,6 @@ public final class ToolWindowsPane extends JBLayeredPane implements Disposable {
           }
           setBoundsInPaletteLayer(component, info.getAnchor(), weight);
         }
-        validate();
-        repaint();
-      }else{
-        super.processComponentEvent(e);
-      }
     }
 
     public final void setBoundsInPaletteLayer(final Component component,final ToolWindowAnchor anchor,float weight){

@@ -301,7 +301,8 @@ public class EditorUtil {
     boolean useOptimization = true;
     boolean hasNonTabs = false;
     boolean hasTabs = false;
-    for (int i = start; i < end; i++) {
+    int scanEndOffset = Math.min(end, start + columnNumber - currentColumn[0] + 1);
+    for (int i = start; i < scanEndOffset; i++) {
       char c = text.charAt(i);
       if (debugBuffer != null) {
         debugBuffer.append(String.format("Found symbol '%c' at the offset %d%n", c, i));
@@ -758,6 +759,14 @@ public class EditorUtil {
 
   public static boolean inVirtualSpace(@NotNull Editor editor, @NotNull LogicalPosition logicalPosition) {
     return !editor.offsetToLogicalPosition(editor.logicalPositionToOffset(logicalPosition)).equals(logicalPosition);
+  }
+
+  public static void reinitSettings() {
+    for (Editor editor : EditorFactory.getInstance().getAllEditors()) {
+      if (editor instanceof EditorEx) {
+        ((EditorEx)editor).reinitSettings();
+      }
+    }
   }
 }
 

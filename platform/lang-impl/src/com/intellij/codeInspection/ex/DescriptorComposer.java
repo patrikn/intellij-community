@@ -16,13 +16,9 @@
 
 package com.intellij.codeInspection.ex;
 
-import com.intellij.codeInspection.CommonProblemDescriptor;
-import com.intellij.codeInspection.InspectionsBundle;
-import com.intellij.codeInspection.ProblemDescriptor;
-import com.intellij.codeInspection.QuickFix;
+import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.reference.RefElement;
 import com.intellij.codeInspection.reference.RefEntity;
-import com.intellij.codeInspection.ui.ProblemDescriptionNode;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
@@ -45,8 +41,9 @@ public class DescriptorComposer extends HTMLComposerImpl {
     myTool = tool;
   }
 
+  @Override
   public void compose(StringBuffer buf, RefEntity refEntity) {
-    genPageHeader(buf, refEntity);      
+    genPageHeader(buf, refEntity);
     if (myTool.getDescriptions(refEntity) != null) {
       appendHeading(buf, InspectionsBundle.message("inspection.problem.synopsis"));
 
@@ -74,6 +71,7 @@ public class DescriptorComposer extends HTMLComposerImpl {
 
   protected void composeAdditionalDescription(final StringBuffer buf, final RefEntity refEntity) {}
 
+  @Override
   public void compose(StringBuffer buf, RefEntity refElement, CommonProblemDescriptor descriptor) {
     CommonProblemDescriptor[] descriptions = myTool.getDescriptions(refElement);
 
@@ -149,7 +147,7 @@ public class DescriptorComposer extends HTMLComposerImpl {
       }
 
       anchor.append("\">");
-      anchor.append(ProblemDescriptionNode.extractHighlightedText(description, expression).replaceAll("\\$", "\\\\\\$"));
+      anchor.append(ProblemDescriptorUtil.extractHighlightedText(description, expression).replaceAll("\\$", "\\\\\\$"));
       //noinspection HardCodedStringLiteral
       anchor.append("</a>");
     }

@@ -404,6 +404,7 @@ public abstract class GitHandler {
   /**
    * Start process
    */
+  @SuppressWarnings("UseOfSystemOutOrSystemErr")
   public synchronized void start() {
     checkNotStarted();
 
@@ -418,6 +419,11 @@ public abstract class GitHandler {
       else {
         LOG.debug("cd " + myWorkingDirectory);
         LOG.debug(printableCommandLine());
+      }
+
+      if (ApplicationManager.getApplication().isUnitTestMode()) {
+        System.out.println("cd " + myWorkingDirectory);
+        System.out.println(printableCommandLine());
       }
 
       // setup environment
@@ -445,7 +451,8 @@ public abstract class GitHandler {
         LOG.debug(String.format("handler=%s, port=%s", myHandlerNo, port));
         addAuthListener(httpAuthenticator);
       }
-      myCommandLine.setEnvParams(myEnv);
+      myCommandLine.getEnvironment().clear();
+      myCommandLine.getEnvironment().putAll(myEnv);
       // start process
       myProcess = startProcess();
       startHandlingStreams();

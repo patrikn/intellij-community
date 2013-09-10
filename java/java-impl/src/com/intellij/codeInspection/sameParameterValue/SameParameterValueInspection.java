@@ -41,14 +41,17 @@ import java.util.List;
 /**
  * @author max
  */
-public class SameParameterValueInspection extends GlobalJavaInspectionTool {
+public class SameParameterValueInspection extends GlobalJavaBatchInspectionTool {
   private static final Logger LOG = Logger.getInstance("#" + SameParameterValueInspection.class.getName());
 
   @Override
   @Nullable
-  public CommonProblemDescriptor[] checkElement(RefEntity refEntity, AnalysisScope scope, InspectionManager manager, GlobalInspectionContext globalContext,
-                                                ProblemDescriptionsProcessor processor) {
-    ArrayList<ProblemDescriptor> problems = null;
+  public CommonProblemDescriptor[] checkElement(@NotNull RefEntity refEntity,
+                                                @NotNull AnalysisScope scope,
+                                                @NotNull InspectionManager manager,
+                                                @NotNull GlobalInspectionContext globalContext,
+                                                @NotNull ProblemDescriptionsProcessor processor) {
+    List<ProblemDescriptor> problems = null;
     if (refEntity instanceof RefMethod) {
       final RefMethod refMethod = (RefMethod)refEntity;
 
@@ -75,8 +78,8 @@ public class SameParameterValueInspection extends GlobalJavaInspectionTool {
 
 
   @Override
-  protected boolean queryExternalUsagesRequests(final RefManager manager, final GlobalJavaInspectionContext globalContext,
-                                                final ProblemDescriptionsProcessor processor) {
+  protected boolean queryExternalUsagesRequests(@NotNull final RefManager manager, @NotNull final GlobalJavaInspectionContext globalContext,
+                                                @NotNull final ProblemDescriptionsProcessor processor) {
     manager.iterate(new RefJavaVisitor() {
       @Override public void visitElement(@NotNull RefEntity refEntity) {
         if (refEntity instanceof RefElement && processor.getDescriptions(refEntity) != null) {
@@ -129,7 +132,7 @@ public class SameParameterValueInspection extends GlobalJavaInspectionTool {
 
   @Override
   @Nullable
-  public String getHint(final QuickFix fix) {
+  public String getHint(@NotNull final QuickFix fix) {
     final InlineParameterValueFix valueFix = (InlineParameterValueFix)fix;
     return valueFix.getParamName() + " " + valueFix.getValue();
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -483,6 +483,11 @@ public class ProgressWindow extends BlockingProgressIndicator implements Disposa
     public void dispose() {
       UIUtil.disposeProgress(myProgressBar);
       UIUtil.dispose(myTitlePanel);
+      final ActionListener[] listeners = myCancelButton.getActionListeners();
+      for (ActionListener listener : listeners) {
+        myCancelButton.removeActionListener(listener);
+      }
+
     }
 
     public JPanel getPanel() {
@@ -645,17 +650,22 @@ public class ProgressWindow extends BlockingProgressIndicator implements Disposa
       }
 
       @Override
-      protected DialogWrapperPeer createPeer(final boolean canBeParent, final boolean toolkitModalIfPossible) {
+      protected DialogWrapperPeer createPeer(final boolean canBeParent, final boolean applicationModalIfPossible) {
+        return createPeer(null, canBeParent, applicationModalIfPossible);
+      }
+
+      @Override
+      protected DialogWrapperPeer createPeer(final Window owner, final boolean canBeParent, final boolean applicationModalIfPossible) {
         if (System.getProperty("vintage.progress") == null) {
           try {
             return new GlassPaneDialogWrapperPeer(this, canBeParent);
           }
           catch (GlassPaneDialogWrapperPeer.GlasspanePeerUnavailableException e) {
-            return super.createPeer(canBeParent, toolkitModalIfPossible);
+            return super.createPeer(WindowManager.getInstance().suggestParentWindow(myProject), canBeParent, applicationModalIfPossible);
           }
         }
         else {
-          return super.createPeer(canBeParent, toolkitModalIfPossible);
+          return super.createPeer(WindowManager.getInstance().suggestParentWindow(myProject), canBeParent, applicationModalIfPossible);
         }
       }
 

@@ -18,7 +18,6 @@ package org.jetbrains.idea.svn.commandLine;
 import org.apache.subversion.javahl.ConflictDescriptor;
 import org.jetbrains.idea.svn.portable.ConflictActionConvertor;
 import org.jetbrains.idea.svn.portable.IdeaSVNInfo;
-import org.jetbrains.idea.svn.portable.OperationConvertor;
 import org.tmatesoft.svn.core.*;
 import org.tmatesoft.svn.core.internal.wc.SVNConflictVersion;
 import org.tmatesoft.svn.core.wc.*;
@@ -35,6 +34,7 @@ import java.util.Date;
  */
 public class SvnInfoStructure {
   public File myFile;
+  public String relativeUrl;
   public SVNURL myUrl;
   public SVNURL myRootURL;
   public long myRevision;
@@ -53,7 +53,7 @@ public class SvnInfoStructure {
   public String myConflictNew;
   public String myConflictWorking;
   public String myPropRejectFile;
-  public SVNLock myLock;
+  public SVNLockWrapper myLockWrapper;
   public SVNDepth myDepth;
   public String myChangelistName;
   public long myWcSize;
@@ -65,7 +65,18 @@ public class SvnInfoStructure {
   public SVNInfo convert() throws SAXException, SVNException {
     return new IdeaSVNInfo(myFile, myUrl, myRootURL, myRevision, myKind, myUuid, myCommittedRevision, myCommittedDate, myAuthor, mySchedule,
                            myCopyFromURL, myCopyFromRevision, myTextTime, myPropTime, myChecksum, myConflictOld, myConflictNew, myConflictWorking,
-                           myPropRejectFile, myLock, myDepth, myChangelistName, myWcSize, createTreeConflict());
+                           myPropRejectFile, getLock(), myDepth, myChangelistName, myWcSize, createTreeConflict());
+  }
+
+  private SVNLock getLock() {
+    SVNLock lock = null;
+
+    if (myLockWrapper != null) {
+      myLockWrapper.setPath(relativeUrl);
+      lock = myLockWrapper.create();
+    }
+
+    return lock;
   }
 
   private SVNTreeConflictDescription createTreeConflict() throws SAXException, SVNException {
@@ -76,7 +87,8 @@ public class SvnInfoStructure {
       final SVNConflictAction action = ConflictActionConvertor.create(ConflictDescriptor.Action.valueOf(myTreeConflict.myAction));
       final SVNConflictReason reason = parseConflictReason(myTreeConflict.myReason);
       //final SVNConflictReason reason = ConflictReasonConvertor.convert(ConflictDescriptor.Reason.valueOf(myTreeConflict.myReason));
-      final SVNOperation operation = OperationConvertor.convert(ConflictDescriptor.Operation.valueOf(myTreeConflict.myOperation));
+      SVNOperation operation = SVNOperation.fromString(myTreeConflict.myOperation);
+      operation = operation == null ? SVNOperation.NONE : operation;
       return new SVNTreeConflictDescription(myFile, myKind, action, reason, operation,
                                             createVersion(myTreeConflict.mySourceLeft),
                                             createVersion(myTreeConflict.mySourceRight));

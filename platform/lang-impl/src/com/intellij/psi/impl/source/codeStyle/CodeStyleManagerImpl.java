@@ -98,9 +98,8 @@ public class CodeStyleManagerImpl extends CodeStyleManager {
     final PsiElement formatted = SourceTreeToPsiMap.treeElementToPsi(new CodeFormatterFacade(getSettings()).processElement(treeElement));
     if (!canChangeWhiteSpacesOnly) {
       return postProcessElement(formatted);
-    } else {
-      return formatted;
     }
+    return formatted;
   }
 
   private PsiElement postProcessElement(@NotNull final PsiElement formatted) {
@@ -145,7 +144,12 @@ public class CodeStyleManagerImpl extends CodeStyleManager {
   }
 
   @Override
-  public void reformatText(@NotNull PsiFile file, @NotNull Collection<TextRange> ranges) throws IncorrectOperationException {
+  public void reformatText(@NotNull PsiFile file, @NotNull Collection<TextRange> ranges)
+    throws IncorrectOperationException {
+    reformatText(file, ranges, null);
+  }
+
+  public void reformatText(@NotNull PsiFile file, @NotNull Collection<TextRange> ranges, @Nullable Editor editor) throws IncorrectOperationException {
     if (ranges.isEmpty()) {
       return;
     }
@@ -163,15 +167,19 @@ public class CodeStyleManagerImpl extends CodeStyleManager {
     final CodeFormatterFacade codeFormatter = new CodeFormatterFacade(getSettings());
     LOG.assertTrue(file.isValid());
 
-    Editor editor = PsiUtilBase.findEditor(file);
+    if (editor == null) {
+      editor = PsiUtilBase.findEditor(file);
+    }
 
     // There is a possible case that cursor is located at the end of the line that contains only white spaces. For example:
     //     public void foo() {
     //         <caret>
     //     }
     // Formatter removes such white spaces, i.e. keeps only line feed symbol. But we want to preserve caret position then.
-    // So, we check if it should be preserved and restore it after formatting if necessary
+    // So, if 'virtual space in editor' is enabled, we save target visual column. Caret indent is ensured otherwise
     int visualColumnToRestore = -1;
+    String caretIndentToRestore = null;
+    RangeMarker caretRangeMarker = null;
 
     if (editor != null) {
       Document document = editor.getDocument();
@@ -191,6 +199,8 @@ public class CodeStyleManagerImpl extends CodeStyleManager {
       }
       if (fixCaretPosition) {
         visualColumnToRestore = editor.getCaretModel().getVisualPosition().column;
+        caretIndentToRestore = document.getText(TextRange.create(lineStartOffset, caretOffset));
+        caretRangeMarker = document.createRangeMarker(lineStartOffset, caretOffset);
       }
     }
 
@@ -227,20 +237,38 @@ public class CodeStyleManagerImpl extends CodeStyleManager {
         postProcessText(file, new TextRange(info.fromStart ? 0 : startElement.getTextRange().getStartOffset(),
                                             info.toEnd ? file.getTextLength() : endElement.getTextRange().getEndOffset()));
       }
+      if (info.startPointer != null) smartPointerManager.removePointer(info.startPointer);
+      if (info.endPointer != null) smartPointerManager.removePointer(info.endPointer);
     }
 
     if (editor == null) {
       return;
     }
 
-    if (visualColumnToRestore < 0) {
-      editor.getScrollingModel().scrollToCaret(ScrollType.RELATIVE);
-      return;
+    boolean virtualSpaceEnabled = editor.getSettings().isVirtualSpace();
+
+    if (virtualSpaceEnabled) {
+      if (visualColumnToRestore < 0) {
+        editor.getScrollingModel().scrollToCaret(ScrollType.RELATIVE);
+        return;
+      }
+      CaretModel caretModel = editor.getCaretModel();
+      VisualPosition position = caretModel.getVisualPosition();
+      if (visualColumnToRestore != position.column) {
+        caretModel.moveToVisualPosition(new VisualPosition(position.line, visualColumnToRestore));
+      }
     }
-    CaretModel caretModel = editor.getCaretModel();
-    VisualPosition position = caretModel.getVisualPosition();
-    if (visualColumnToRestore != position.column) {
-      caretModel.moveToVisualPosition(new VisualPosition(position.line, visualColumnToRestore));
+    else {
+      if (caretRangeMarker == null || !caretRangeMarker.isValid() || caretIndentToRestore == null) {
+        return;
+      }
+      int offset = caretRangeMarker.getStartOffset();
+      caretRangeMarker.dispose();
+      if (editor.getCaretModel().getVisualPosition().column == visualColumnToRestore) {
+        return;
+      }
+      Document document = editor.getDocument();
+      document.replaceString(document.getLineStartOffset(document.getLineNumber(offset)), offset, caretIndentToRestore);
     }
   }
 
@@ -787,11 +815,10 @@ public class CodeStyleManagerImpl extends CodeStyleManager {
   }
 
   private static class RangeFormatInfo{
-
-    public final SmartPsiElementPointer startPointer;
-    public final SmartPsiElementPointer endPointer;
-    public final boolean                fromStart;
-    public final boolean                toEnd;
+    private final SmartPsiElementPointer startPointer;
+    private final SmartPsiElementPointer endPointer;
+    private final boolean                fromStart;
+    private final boolean                toEnd;
 
     RangeFormatInfo(@Nullable SmartPsiElementPointer startPointer,
                     @Nullable SmartPsiElementPointer endPointer,

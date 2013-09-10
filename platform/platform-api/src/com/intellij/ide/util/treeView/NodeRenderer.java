@@ -22,6 +22,7 @@ import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.openapi.editor.markup.TextAttributes;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.ColoredTreeCellRenderer;
 import com.intellij.ui.SimpleTextAttributes;
 import org.jetbrains.annotations.Nls;
@@ -60,18 +61,29 @@ public class NodeRenderer extends ColoredTreeCellRenderer {
         doAppend(text, simpleTextAttributes, selected);
       }
       else {
+        boolean first = true;
         for (PresentableNodeDescriptor.ColoredFragment each : coloredText) {
           SimpleTextAttributes simpleTextAttributes = each.getAttributes();
           if (each.getAttributes().getFgColor() == null && presentation.getForcedTextForeground() != null) {
             simpleTextAttributes = addColorToSimpleTextAttributes(each.getAttributes(),
               presentation.getForcedTextForeground() != null ? presentation.getForcedTextForeground() : color);
           }
+          if (first) {
+            final TextAttributesKey textAttributesKey = presentation.getTextAttributesKey();
+            if (textAttributesKey != null) {
+              final TextAttributes forcedAttributes = getColorsScheme().getAttributes(textAttributesKey);
+              if (forcedAttributes != null) {
+                simpleTextAttributes = SimpleTextAttributes.merge(SimpleTextAttributes.fromTextAttributes(forcedAttributes), simpleTextAttributes);
+              }
+            }
+            first = false;
+          }
           doAppend(each.getText(), simpleTextAttributes, true);
         }
       }
 
       final String location = presentation.getLocationString();
-      if (location != null && !location.isEmpty()) {
+      if (!StringUtil.isEmpty(location)) {
         doAppend(presentation.getLocationPrefix() + location + presentation.getLocationSuffix(),
                  SimpleTextAttributes.GRAY_ATTRIBUTES, false, selected);
       }

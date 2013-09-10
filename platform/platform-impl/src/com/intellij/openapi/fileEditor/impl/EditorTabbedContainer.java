@@ -86,11 +86,13 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
     final ActionManager actionManager = ActionManager.getInstance();
     myTabs = new JBEditorTabs(project, actionManager, IdeFocusManager.getInstance(project), this);
     myTabs.setDataProvider(new MyDataProvider()).setPopupGroup(new Getter<ActionGroup>() {
+      @Override
       public ActionGroup get() {
         return (ActionGroup)CustomActionsSchema.getInstance().getCorrectedAction(IdeActions.GROUP_EDITOR_TAB_POPUP);
       }
     }, ActionPlaces.EDITOR_TAB_POPUP, false).setNavigationActionsEnabled(false).addTabMouseListener(new TabMouseListener()).getPresentation()
       .setTabDraggingEnabled(true).setUiDecorator(new UiDecorator() {
+      @Override
       @NotNull
       public UiDecoration getDecoration() {
         return new UiDecoration(null, new Insets(TabsUtil.TAB_VERTICAL_PADDING, 10, TabsUtil.TAB_VERTICAL_PADDING, 10));
@@ -98,6 +100,7 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
     }).setTabLabelActionsMouseDeadzone(TimedDeadzone.NULL).setGhostsAlwaysVisible(true).setTabLabelActionsAutoHide(false)
       .setActiveTabFillIn(EditorColorsManager.getInstance().getGlobalScheme().getDefaultBackground()).setPaintFocus(false).getJBTabs()
       .addListener(new TabsListener.Adapter() {
+        @Override
         public void selectionChanged(final TabInfo oldSelection, final TabInfo newSelection) {
           final FileEditorManager editorManager = FileEditorManager.getInstance(myProject);
           final FileEditor oldEditor = oldSelection != null ? editorManager.getSelectedEditor((VirtualFile)oldSelection.getObject()) : null;
@@ -126,22 +129,35 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
         return result;
       }
     }).getPresentation().setRequestFocusOnLastFocusedComponent(true);
+    myTabs.addMouseListener(new MouseAdapter() {
+      @Override
+      public void mouseClicked(MouseEvent e) {
+        if (myTabs.findInfo(e) != null || isFloating()) return;
+        if (!e.isPopupTrigger() && SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
+          final ActionManager mgr = ActionManager.getInstance();
+          mgr.tryToExecute(mgr.getAction("HideAllWindows"), e, null, ActionPlaces.UNKNOWN, true);
+        }
+      }
+    });
 
     setTabPlacement(UISettings.getInstance().EDITOR_TAB_PLACEMENT);
 
     updateTabBorder();
 
     ((ToolWindowManagerEx)ToolWindowManager.getInstance(myProject)).addToolWindowManagerListener(new ToolWindowManagerAdapter() {
+      @Override
       public void stateChanged() {
         updateTabBorder();
       }
 
+      @Override
       public void toolWindowRegistered(@NotNull final String id) {
         updateTabBorder();
       }
     });
 
     UISettings.getInstance().addUISettingsListener(new UISettingsListener() {
+      @Override
       public void uiSettingsChanged(UISettings source) {
         updateTabBorder();
       }
@@ -344,6 +360,7 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
       myTab = tab;
     }
 
+    @Override
     public void putInfo(@NotNull Map<String, String> info) {
       info.put("editorTab", myTab.getText());
     }
@@ -377,6 +394,7 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
     return tab.getComponent();
   }
 
+  @Override
   public void dispose() {
 
   }
@@ -399,6 +417,7 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
       e.getPresentation().setText("Close. Alt-click to close others.");
     }
 
+    @Override
     public void actionPerformed(final AnActionEvent e) {
       final FileEditorManagerEx mgr = FileEditorManagerEx.getInstanceEx(myProject);
       EditorWindow window;
@@ -424,6 +443,7 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
   }
 
   private class MyDataProvider implements DataProvider {
+    @Override
     public Object getData(@NonNls final String dataId) {
       if (PlatformDataKeys.PROJECT.is(dataId)) {
         return myProject;
@@ -454,6 +474,7 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
     }
   }
 
+  @Override
   public void close() {
     TabInfo selected = myTabs.getTargetInfo();
     if (selected == null) return;
@@ -503,7 +524,7 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
         if (!(deepestComponent instanceof InplaceButton)) {
           myActionClickCount++;
         }
-        if (myActionClickCount == 2 && !isFloating()) {
+        if (myActionClickCount > 1 && !isFloating()) {
           final ActionManager mgr = ActionManager.getInstance();
           mgr.tryToExecute(mgr.getAction("HideAllWindows"), e, null, ActionPlaces.UNKNOWN, true);
         }
@@ -523,6 +544,7 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
   }
 
   private class MySwitchProvider implements SwitchProvider {
+    @Override
     public List<SwitchTarget> getTargets(final boolean onlyVisible, boolean originalProvider) {
       final ArrayList<SwitchTarget> result = new ArrayList<SwitchTarget>();
       TabInfo selected = myTabs.getSelectedInfo();
@@ -542,6 +564,7 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
       return result;
     }
 
+    @Override
     public SwitchTarget getCurrentTarget() {
       TabInfo selected = myTabs.getSelectedInfo();
       final Ref<SwitchTarget> targetRef = new Ref<SwitchTarget>();
@@ -562,10 +585,12 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
       return targetRef.get();
     }
 
+    @Override
     public JComponent getComponent() {
       return null;
     }
 
+    @Override
     public boolean isCycleRoot() {
       return false;
     }
@@ -579,7 +604,7 @@ public final class EditorTabbedContainer implements Disposable, CloseAction.Clos
     @Override
     public void dragOutStarted(MouseEvent mouseEvent, TabInfo info) {
       final TabInfo previousSelection = info.getPreviousSelection();
-      final Image img = myTabs.getComponentImage(info);
+      final Image img = JBTabsImpl.getComponentImage(info);
       info.setHidden(true);
       if (previousSelection != null) {
         myTabs.select(previousSelection, true);

@@ -87,7 +87,7 @@ public class TrafficProgressPanel extends JPanel {
       fakeStatusLargeEnough.passStati
         .add(new ProgressableTextEditorHighlightingPass(project, null, DaemonBundle.message("pass.wolf"), psiFile, false) {
           @Override
-          protected void collectInformationWithProgress(ProgressIndicator progress) {
+          protected void collectInformationWithProgress(@NotNull ProgressIndicator progress) {
           }
 
           @Override
@@ -224,7 +224,7 @@ public class TrafficProgressPanel extends JPanel {
       String text = "<html><body>";
       for (int i = status.errorCount.length - 1; i >= 0; i--) {
         if (status.errorCount[i] > 0) {
-          final HighlightSeverity severity = SeverityRegistrar.getInstance(myTrafficLightRenderer.getProject()).getSeverityByIndex(i);
+          final HighlightSeverity severity = SeverityRegistrar.getSeverityRegistrar(myTrafficLightRenderer.getProject()).getSeverityByIndex(i);
           String name =
             status.errorCount[i] > 1 ? StringUtil.pluralize(severity.toString().toLowerCase()) : severity.toString().toLowerCase();
           text += status.errorAnalyzingFinished

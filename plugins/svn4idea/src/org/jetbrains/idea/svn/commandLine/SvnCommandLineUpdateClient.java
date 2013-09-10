@@ -15,16 +15,14 @@
  */
 package org.jetbrains.idea.svn.commandLine;
 
-import com.intellij.execution.process.ProcessOutputTypes;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.ArrayUtil;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.idea.svn.SvnApplicationSettings;
 import org.jetbrains.idea.svn.SvnVcs;
 import org.jetbrains.idea.svn.checkin.IdeaSvnkitBasedAuthenticationCallback;
-import org.jetbrains.idea.svn.config.SvnBindException;
 import org.jetbrains.idea.svn.portable.SvnSvnkitUpdateClient;
 import org.tmatesoft.svn.core.*;
 import org.tmatesoft.svn.core.wc.*;
@@ -49,9 +47,9 @@ public class SvnCommandLineUpdateClient extends SvnSvnkitUpdateClient {
   private final VirtualFile myCommonAncestor;
   private boolean myIgnoreExternals;
 
-  public SvnCommandLineUpdateClient(final Project project, VirtualFile commonAncestor) {
-    super(SvnVcs.getInstance(project).createUpdateClient());
-    myProject = project;
+  public SvnCommandLineUpdateClient(final SvnVcs vcs, VirtualFile commonAncestor) {
+    super(vcs.createUpdateClient());
+    myProject = vcs.getProject();
     myCommonAncestor = commonAncestor;
   }
 
@@ -88,96 +86,72 @@ public class SvnCommandLineUpdateClient extends SvnSvnkitUpdateClient {
     File base = myCommonAncestor == null ? paths[0] : new File(myCommonAncestor.getPath());
     base = base.isDirectory() ? base : base.getParentFile();
 
-    final List<String> parameters = new ArrayList<String>();
-    if (revision != null && ! SVNRevision.UNDEFINED.equals(revision) && ! SVNRevision.WORKING.equals(revision)) {
-      parameters.add("-r");
-      parameters.add(revision.toString());
-    }
-    // unknown depth is not used any more for 1.7 -> why?
-    if (depth != null && ! SVNDepth.UNKNOWN.equals(depth)) {
-      parameters.add("--depth");
-      parameters.add(depth.toString());
-    }
-    if (allowUnversionedObstructions) {
-      parameters.add("--force");
-    }
-    if (depthIsSticky && depth != null) {// !!! not sure, but not used
-      parameters.add("--set-depth");
-      parameters.add(depth.toString());
-    }
-    if (makeParents) {
-      parameters.add("--parents");
-    }
-    if (myIgnoreExternals) {
-      parameters.add("--ignore-externals");
-    }
-    parameters.add("--accept");
-    parameters.add("postpone");
-
-    for (File path : paths) {
-      parameters.add(path.getPath());
-    }
-
-    final AtomicReference<SVNException> excRef = new AtomicReference<SVNException>();
-    final ISVNEventHandler handler = getEventHandler();
-    final UpdateOutputLineConverter converter = new UpdateOutputLineConverter(base);
+    final List<String> parameters = prepareParameters(paths, revision, depth, allowUnversionedObstructions, depthIsSticky, makeParents);
+    final BaseUpdateCommandListener listener = createCommandListener(paths, updatedToRevision, base);
     try {
-      final LineCommandListener listener = new LineCommandListener() {
-        final long[] myRevisions = new long[paths.length];
-
-        @Override
-        public void baseDirectory(File file) {
-        }
-
-        @Override
-        public void onLineAvailable(String line, Key outputType) {
-          if (ProcessOutputTypes.STDOUT.equals(outputType)) {
-            final SVNEvent event = converter.convert(line);
-            if (event != null) {
-              checkForUpdateCompleted(event);
-              try {
-                handler.handleEvent(event, 0.5);
-              }
-              catch (SVNException e) {
-                cancel();
-                excRef.set(e);
-              }
-            }
-          }
-        }
-
-        private void checkForUpdateCompleted(SVNEvent event) {
-          if (SVNEventAction.UPDATE_COMPLETED.equals(event.getAction())) {
-            final long eventRevision = event.getRevision();
-            for (int i = 0; i < paths.length; i++) {
-              final File path = paths[i];
-              if (FileUtil.filesEqual(path, event.getFile())) {
-                myRevisions[i] = eventRevision;
-                break;
-              }
-            }
-          }
-        }
-
-        @Override
-        public void processTerminated(int exitCode) {
-          super.processTerminated(exitCode);
-          updatedToRevision.set(myRevisions);
-        }
-      };
       SvnLineCommand.runWithAuthenticationAttempt(SvnApplicationSettings.getInstance().getCommandLinePath(),
-                                                  base, SvnCommandName.up, listener,
+                                                  base, info.getURL(), SvnCommandName.up, listener,
                                                   new IdeaSvnkitBasedAuthenticationCallback(SvnVcs.getInstance(myProject)),
                                                   ArrayUtil.toStringArray(parameters));
     }
     catch (SvnBindException e) {
       throw new SVNException(SVNErrorMessage.create(SVNErrorCode.IO_ERROR, e));
     }
-    if (excRef.get() != null) {
-      throw excRef.get();
-    }
+
+    listener.throwIfException();
 
     return updatedToRevision.get();
+  }
+
+  private BaseUpdateCommandListener createCommandListener(final File[] paths,
+                                                          final AtomicReference<long[]> updatedToRevision,
+                                                          final File base) {
+    return new BaseUpdateCommandListener(base, getEventHandler()) {
+      final long[] myRevisions = new long[paths.length];
+
+      @Override
+      protected void beforeHandler(@NotNull SVNEvent event) {
+        if (SVNEventAction.UPDATE_COMPLETED.equals(event.getAction())) {
+          final long eventRevision = event.getRevision();
+          for (int i = 0; i < paths.length; i++) {
+            final File path = paths[i];
+            if (FileUtil.filesEqual(path, event.getFile())) {
+              myRevisions[i] = eventRevision;
+              break;
+            }
+          }
+        }
+      }
+
+      @Override
+      public void processTerminated(int exitCode) {
+        super.processTerminated(exitCode);
+        updatedToRevision.set(myRevisions);
+      }
+    };
+  }
+
+  private List<String> prepareParameters(File[] paths,
+                                         SVNRevision revision,
+                                         SVNDepth depth,
+                                         boolean allowUnversionedObstructions,
+                                         boolean depthIsSticky, boolean makeParents) {
+    List<String> parameters = new ArrayList<String>();
+
+    CommandUtil.put(parameters, revision);
+    CommandUtil.put(parameters, depth);
+    CommandUtil.put(parameters, allowUnversionedObstructions, "--force");
+    if (depthIsSticky && depth != null) {// !!! not sure, but not used
+      parameters.add("--set-depth");
+      parameters.add(depth.toString());
+    }
+    CommandUtil.put(parameters, makeParents, "--parents");
+    CommandUtil.put(parameters, myIgnoreExternals, "--ignore-externals");
+    parameters.add("--accept");
+    parameters.add("postpone");
+    CommandUtil.put(parameters, paths);
+
+    return parameters;
   }
 
 

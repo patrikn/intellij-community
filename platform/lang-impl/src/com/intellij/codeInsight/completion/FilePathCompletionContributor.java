@@ -239,9 +239,9 @@ public class FilePathCompletionContributor extends CompletionContributor {
       }
     }
     else if (original instanceof FileReferenceOwner) {
-      final FileReference fileReference = ((FileReferenceOwner)original).getLastFileReference();
-      if (fileReference != null) {
-        return Pair.create(fileReference, true);
+      final PsiFileReference fileReference = ((FileReferenceOwner)original).getLastFileReference();
+      if (fileReference instanceof FileReference) {
+        return Pair.create((FileReference) fileReference, true);
       }
     }
 
@@ -296,7 +296,7 @@ public class FilePathCompletionContributor extends CompletionContributor {
 
         FileReference ref = fileReferencePair.getFirst();
         context.setTailOffset(ref.getRangeInElement().getEndOffset() + ref.getElement().getTextRange().getStartOffset());
-        ref.bindToElement(myFile, true);
+        ref.bindToElement(myFile);
       }
     }
 

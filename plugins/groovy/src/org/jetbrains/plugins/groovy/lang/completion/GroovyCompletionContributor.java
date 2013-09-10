@@ -308,7 +308,9 @@ public class GroovyCompletionContributor extends CompletionContributor {
         });
 
         if (reference.getQualifier() == null) {
-          GroovySmartCompletionContributor.addExpectedClassMembers(parameters, result);
+          if (!GroovySmartCompletionContributor.AFTER_NEW.accepts(position)) {
+            GroovySmartCompletionContributor.addExpectedClassMembers(parameters, result);
+          }
 
           if (isClassNamePossible(position) && JavaCompletionContributor.mayStartClassName(result)) {
             result.stopHere();
@@ -656,6 +658,12 @@ public class GroovyCompletionContributor extends CompletionContributor {
     final String identifier = getIdentifier(context);
     if (identifier != null) {
       context.setDummyIdentifier(identifier);
+    }
+
+    //don't eat $ from gstrings when completing previous injection ref. see IDEA-110369
+    PsiElement position = context.getFile().findElementAt(context.getStartOffset());
+    if (position!= null && position.getNode().getElementType() == mDOLLAR) {
+      context.getOffsetMap().addOffset(CompletionInitializationContext.IDENTIFIER_END_OFFSET, context.getStartOffset());
     }
   }
 

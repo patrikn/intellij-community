@@ -31,6 +31,11 @@ import java.io.IOException;
  * @author peter
  */
 public class DataFlowInspectionTest extends LightCodeInsightFixtureTestCase {
+  @Override
+  protected void setUp() throws Exception {
+    super.setUp();
+    myFixture.addClass("package org.jetbrains.annotations; public @interface Contract { String value(); }");
+  }
 
   @Override
   protected String getTestDataPath() {
@@ -40,6 +45,7 @@ public class DataFlowInspectionTest extends LightCodeInsightFixtureTestCase {
   private void doTest() {
     final DataFlowInspection inspection = new DataFlowInspection();
     inspection.SUGGEST_NULLABLE_ANNOTATIONS = true;
+    inspection.REPORT_CONSTANT_REFERENCE_VALUES = false;
     myFixture.enableInspections(inspection);
     myFixture.testHighlighting(true, false, true, getTestName(false) + ".java");
   }
@@ -68,7 +74,9 @@ public class DataFlowInspectionTest extends LightCodeInsightFixtureTestCase {
   public void testIDEA84489() throws Throwable { doTest(); }
   public void testComparingToNotNullShouldNotAffectNullity() throws Throwable { doTest(); }
   public void testStringTernaryAlwaysTrue() throws Throwable { doTest(); }
+  public void testStringConcatAlwaysNotNull() throws Throwable { doTest(); }
 
+  public void testNotNullPrimitive() throws Throwable { doTest(); }
   public void testBoxing128() throws Throwable { doTest(); }
   public void testFinalFieldsInitializedByAnnotatedParameters() throws Throwable { doTest(); }
   public void testMultiCatch() throws Throwable { doTest(); }
@@ -97,6 +105,7 @@ public class DataFlowInspectionTest extends LightCodeInsightFixtureTestCase {
   public void testReturningNullFromVoidMethod() throws Throwable { doTest(); }
 
   public void testCatchRuntimeException() throws Throwable { doTest(); }
+  public void testCatchThrowable() throws Throwable { doTest(); }
   public void testNotNullCatchParameter() { doTest(); }
 
   public void testAssertFailInCatch() throws Throwable {
@@ -137,6 +146,43 @@ public class DataFlowInspectionTest extends LightCodeInsightFixtureTestCase {
     myFixture.testHighlighting(true, false, true, getTestName(false) + ".java");
   }
 
+  public void testReportConstantReferences() {
+    doTestReportConstantReferences();
+    myFixture.launchAction(myFixture.findSingleIntention("Replace with 'null'"));
+    myFixture.checkResultByFile(getTestName(false) + "_after.java");
+  }
+
+  public void testReportConstantReferencesAfterFinalFieldAccess() { doTestReportConstantReferences(); }
+
+  private void doTestReportConstantReferences() {
+    DataFlowInspection inspection = new DataFlowInspection();
+    inspection.SUGGEST_NULLABLE_ANNOTATIONS = true;
+    myFixture.enableInspections(inspection);
+    myFixture.testHighlighting(true, false, true, getTestName(false) + ".java");
+  }
+
+  public void _testReportConstantReferences_ReplaceWithString() {
+    doTestReportConstantReferences();
+    myFixture.launchAction(myFixture.findSingleIntention("Replace with 'CONST'"));
+    myFixture.checkResultByFile(getTestName(false) + "_after.java");
+  }
+  public void _testReportConstantReferences_ReplaceWithIntConstant() {
+    doTestReportConstantReferences();
+    myFixture.launchAction(myFixture.findSingleIntention("Replace with 'CONST'"));
+    myFixture.checkResultByFile(getTestName(false) + "_after.java");
+  }
+  public void _testReportConstantReferences_ReplaceWithEnum() {
+    myFixture.addClass("package foo; public enum MyEnum { FOO }");
+    doTestReportConstantReferences();
+    myFixture.launchAction(myFixture.findSingleIntention("Replace with 'FOO'"));
+    myFixture.checkResultByFile(getTestName(false) + "_after.java");
+  }
+  public void _testReportConstantReferences_NotInComplexAssignment() {
+    doTestReportConstantReferences();
+    assertEmpty(myFixture.filterAvailableIntentions("Replace with"));
+  }
+  public void _testReportConstantReferences_Switch() { doTestReportConstantReferences(); }
+
   public void testCheckFieldInitializers() {
     doTest();
   }
@@ -147,6 +193,7 @@ public class DataFlowInspectionTest extends LightCodeInsightFixtureTestCase {
   public void testMutableVolatileNullableFieldsTreatment() { doTest(); }
   public void testMutableNotAnnotatedFieldsTreatment() { doTest(); }
   public void testSuperCallMayChangeFields() { doTest(); }
+  public void testOtherCallMayChangeFields() { doTest(); }
 
   public void testMethodCallFlushesField() { doTest(); }
   public void testUnknownFloatMayBeNaN() { doTest(); }
@@ -155,6 +202,7 @@ public class DataFlowInspectionTest extends LightCodeInsightFixtureTestCase {
   public void testTransientFinalField() { doTest(); }
   public void _testSymmetricUncheckedCast() { doTest(); }
   public void testNullCheckDoesntAffectUncheckedCast() { doTest(); }
+  public void testThrowNull() { doTest(); }
 
   public void testNullableForeachVariable() {
     setupCustomAnnotations();
@@ -166,6 +214,8 @@ public class DataFlowInspectionTest extends LightCodeInsightFixtureTestCase {
   public void testOmnipresentExceptions() { doTest(); }
 
   public void testEqualsHasNoSideEffects() { doTest(); }
+
+  public void testHonorGetterAnnotation() { doTest(); }
 
   public void testIsNullCheck() throws Exception {
     ConditionCheckManager.getInstance(myModule.getProject()).getIsNullCheckMethods().add(
@@ -225,4 +275,21 @@ public class DataFlowInspectionTest extends LightCodeInsightFixtureTestCase {
     assert psiMethod != null;
     return new ConditionChecker.FromPsiBuilder(psiMethod, psiMethod.getParameterList().getParameters()[0], type).build();
   }
+
+  public void testIgnoreAssertions() {
+    final DataFlowInspection inspection = new DataFlowInspection();
+    inspection.IGNORE_ASSERT_STATEMENTS = true;
+    myFixture.enableInspections(inspection);
+    myFixture.testHighlighting(true, false, true, getTestName(false) + ".java");
+  }
+
+  public void testContractAnnotation() { doTest(); }
+  public void testContractInLoopNotTooComplex() { doTest(); }
+  public void testContractWithNullable() { doTest(); }
+
+  public void testBoxingImpliesNotNull() { doTest(); }
+  public void testLargeIntegersAreNotEqualWhenBoxed() { doTest(); }
+  public void testNoGenericCCE() { doTest(); }
+  public void testLongCircuitOperations() { doTest(); }
+  public void testUnconditionalForLoop() { doTest(); }
 }

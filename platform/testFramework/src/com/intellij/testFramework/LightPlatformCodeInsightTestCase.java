@@ -38,6 +38,7 @@ import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.openapi.vfs.LocalFileSystem;
@@ -117,12 +118,8 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
    */
   protected void configureByFile(@TestDataFile @NonNls @NotNull String filePath) {
     try {
-      String fullPath = getTestDataPath() + filePath;
-
-      final File ioFile = new File(fullPath);
-      String fileText = FileUtil.loadFile(ioFile, CharsetToolkit.UTF8);
-      fileText = StringUtil.convertLineSeparators(fileText);
-
+      final File ioFile = new File(getTestDataPath() + filePath);
+      String fileText = FileUtilRt.loadFile(ioFile, CharsetToolkit.UTF8, true);
       configureFromFileText(ioFile.getName(), fileText);
     }
     catch (IOException e) {

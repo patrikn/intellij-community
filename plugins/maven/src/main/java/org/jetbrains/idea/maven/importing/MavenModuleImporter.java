@@ -15,6 +15,8 @@
  */
 package org.jetbrains.idea.maven.importing;
 
+import com.intellij.openapi.application.AccessToken;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleType;
 import com.intellij.openapi.roots.*;
@@ -25,6 +27,7 @@ import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.pom.java.LanguageLevel;
+import gnu.trove.THashSet;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -33,7 +36,6 @@ import org.jetbrains.idea.maven.model.MavenConstants;
 import org.jetbrains.idea.maven.project.*;
 import org.jetbrains.idea.maven.utils.MavenUtil;
 
-import java.io.File;
 import java.util.List;
 import java.util.Map;
 
@@ -147,30 +149,41 @@ public class MavenModuleImporter {
   }
 
   private void configDependencies() {
+    THashSet<String> dependencyTypesFromSettings = new THashSet<String>();
+
+    AccessToken accessToken = ReadAction.start();
+    try {
+      if (myModule.getProject().isDisposed()) return;
+
+      dependencyTypesFromSettings.addAll(MavenProjectsManager.getInstance(myModule.getProject()).getImportingSettings().getDependencyTypesAsSet());
+    }
+    finally {
+      accessToken.finish();
+    }
+
+
     for (MavenArtifact artifact : myMavenProject.getDependencies()) {
-      if (!myMavenProject.isSupportedDependency(artifact, SupportedRequestType.FOR_IMPORT)) continue;
+      String dependencyType = artifact.getType();
+
+      if (!dependencyTypesFromSettings.contains(dependencyType)
+          && !myMavenProject.getDependencyTypesFromImporters(SupportedRequestType.FOR_IMPORT).contains(dependencyType)) {
+        continue;
+      }
 
       DependencyScope scope = selectScope(artifact.getScope());
 
       MavenProject depProject = myMavenTree.findProject(artifact.getMavenId());
 
-      if (depProject != null && !myMavenTree.isIgnored(depProject)) {
+      if (depProject != null) {
         if (depProject == myMavenProject) continue;
-        boolean isTestJar = MavenConstants.TYPE_TEST_JAR.equals(artifact.getType()) || "tests".equals(artifact.getClassifier());
-        myRootModelAdapter.addModuleDependency(myMavenProjectToModuleName.get(depProject), scope, isTestJar);
 
-        Element buildHelperCfg = depProject.getPluginGoalConfiguration("org.codehaus.mojo", "build-helper-maven-plugin", "attach-artifact");
-        if (buildHelperCfg != null) {
-          addAttachArtifactDependency(buildHelperCfg, scope, depProject, artifact);
-        }
-
-        if (artifact.getClassifier() != null && !"system".equals(artifact.getScope())) {
-          MavenArtifact a = new MavenArtifact(
+        if (myMavenTree.isIgnored(depProject)) {
+          MavenArtifact projectsArtifactInRepository = new MavenArtifact(
             artifact.getGroupId(),
             artifact.getArtifactId(),
             artifact.getVersion(),
             artifact.getBaseVersion(),
-            artifact.getType(),
+            dependencyType,
             artifact.getClassifier(),
             artifact.getScope(),
             artifact.isOptional(),
@@ -180,7 +193,38 @@ public class MavenModuleImporter {
             false, false
           );
 
-          myRootModelAdapter.addLibraryDependency(a, scope, myModifiableModelsProvider, myMavenProject);
+          myRootModelAdapter.addLibraryDependency(projectsArtifactInRepository, scope, myModifiableModelsProvider, myMavenProject);
+        }
+        else {
+          boolean isTestJar = MavenConstants.TYPE_TEST_JAR.equals(dependencyType) || "tests".equals(artifact.getClassifier());
+          myRootModelAdapter.addModuleDependency(myMavenProjectToModuleName.get(depProject), scope, isTestJar);
+
+          Element buildHelperCfg = depProject.getPluginGoalConfiguration("org.codehaus.mojo", "build-helper-maven-plugin", "attach-artifact");
+          if (buildHelperCfg != null) {
+            addAttachArtifactDependency(buildHelperCfg, scope, depProject, artifact);
+          }
+
+          if (artifact.getClassifier() != null
+              && !isTestJar
+              && !"system".equals(artifact.getScope())
+              && !"false".equals(System.getProperty("idea.maven.classifier.dep"))) {
+            MavenArtifact a = new MavenArtifact(
+              artifact.getGroupId(),
+              artifact.getArtifactId(),
+              artifact.getVersion(),
+              artifact.getBaseVersion(),
+              dependencyType,
+              artifact.getClassifier(),
+              artifact.getScope(),
+              artifact.isOptional(),
+              artifact.getExtension(),
+              null,
+              myMavenProject.getLocalRepository(),
+              false, false
+            );
+
+            myRootModelAdapter.addLibraryDependency(a, scope, myModifiableModelsProvider, myMavenProject);
+          }
         }
       }
       else if ("system".equals(artifact.getScope())) {

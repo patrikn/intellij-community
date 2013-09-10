@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ import com.intellij.openapi.util.io.ByteSequence;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.CharsetToolkit;
+import com.intellij.openapi.vfs.VFileProperty;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileSystem;
 import com.intellij.openapi.vfs.newvfs.FileSystemInterface;
@@ -149,12 +150,12 @@ public class FileTypeManagerImpl extends FileTypeManagerEx implements NamedJDOME
       }
     };
 
-    for (final FileTypeFactory factory : Extensions.getExtensions(FileTypeFactory.FILE_TYPE_FACTORY_EP)) {
+    for (FileTypeFactory factory : Extensions.getExtensions(FileTypeFactory.FILE_TYPE_FACTORY_EP)) {
       try {
         factory.createFileTypes(consumer);
       }
-      catch (final Error ex) {
-        PluginManager.disableIncompatiblePlugin(factory, ex);
+      catch (Throwable t) {
+        PluginManager.handleComponentError(t, factory.getClass().getName(), null);
       }
     }
   }
@@ -191,7 +192,6 @@ public class FileTypeManagerImpl extends FileTypeManagerEx implements NamedJDOME
         }
 
         return null;
-
       }
 
       @Override
@@ -218,7 +218,6 @@ public class FileTypeManagerImpl extends FileTypeManagerEx implements NamedJDOME
         }
 
         return new Document(root);
-
       }
 
       @Override
@@ -317,28 +316,34 @@ public class FileTypeManagerImpl extends FileTypeManagerEx implements NamedJDOME
     FileType fileType = file.getUserData(FILE_TYPE_KEY);
     if (fileType != null) return fileType;
 
-    final FileType assignedFileType = file instanceof LightVirtualFile? ((LightVirtualFile)file).getAssignedFileType() : null;
-    if (assignedFileType != null) return assignedFileType;
+    if (file instanceof LightVirtualFile) {
+      fileType = ((LightVirtualFile)file).getAssignedFileType();
+      if (fileType != null) return fileType;
+    }
 
     //noinspection ForLoopReplaceableByForEach
     for (int i = 0, size = mySpecialFileTypes.size(); i < size; i++) {
-      final FileTypeIdentifiableByVirtualFile type = mySpecialFileTypes.get(i);
-      if (type.isMyFileType(file)) return type;
+      FileTypeIdentifiableByVirtualFile type = mySpecialFileTypes.get(i);
+      if (type.isMyFileType(file)) {
+        return type;
+      }
     }
 
-    FileType byFileName = getFileTypeByFileName(file.getName());
-    if (byFileName != UnknownFileType.INSTANCE) return byFileName;
-    FileType detected = file.getUserData(DETECTED_FROM_CONTENT_FILE_TYPE_KEY);
-    if (detected != null) {
-      return detected;
-    }
+    fileType = getFileTypeByFileName(file.getName());
+    if (fileType != UnknownFileType.INSTANCE) return fileType;
+
+    fileType = file.getUserData(DETECTED_FROM_CONTENT_FILE_TYPE_KEY);
+    if (fileType != null) return fileType;
+
     return UnknownFileType.INSTANCE;
   }
 
   @NotNull
   @Override
   public FileType detectFileTypeFromContent(@NotNull VirtualFile file) {
-    if (file.isDirectory() || !file.isValid() || file.isSpecialFile()) return UnknownFileType.INSTANCE;
+    if (file.isDirectory() || !file.isValid() || file.is(VFileProperty.SPECIAL)) {
+      return UnknownFileType.INSTANCE;
+    }
     FileType fileType = file.getUserData(DETECTED_FROM_CONTENT_FILE_TYPE_KEY);
     if (fileType == null) {
       fileType = detectFromContent(file);
@@ -347,8 +352,19 @@ public class FileTypeManagerImpl extends FileTypeManagerEx implements NamedJDOME
     return fileType;
   }
 
-  private static class FileTypeDetectorHolder {
-    private static final FileTypeDetector[] FILE_TYPE_DETECTORS = Extensions.getExtensions(FileTypeDetector.EP_NAME);
+  @Override
+  public FileType findFileTypeByName(String fileTypeName) {
+    FileType type = getStdFileType(fileTypeName);
+    // TODO: Abstract file types are not std one, so need to be restored specially,
+    // currently there are 6 of them and restoration does not happen very often so just iteration is enough
+    if (type == PlainTextFileType.INSTANCE && !fileTypeName.equals(type.getName())) {
+      for (FileType fileType: getRegisteredFileTypes()) {
+        if (fileTypeName.equals(fileType.getName())) {
+          return fileType;
+        }
+      }
+    }
+    return type;
   }
 
   private static final AtomicInteger DETECTED_COUNT = new AtomicInteger();
@@ -383,8 +399,9 @@ public class FileTypeManagerImpl extends FileTypeManagerEx implements NamedJDOME
             else {
               text = null;
             }
+
             FileType detected = null;
-            for (FileTypeDetector detector : FileTypeDetectorHolder.FILE_TYPE_DETECTORS) {
+            for (FileTypeDetector detector : Extensions.getExtensions(FileTypeDetector.EP_NAME)) {
               detected = detector.detect(file, byteSequence, text);
               if (detected != null) break;
             }

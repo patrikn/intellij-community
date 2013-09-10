@@ -24,6 +24,7 @@ package com.theoryinpractice.testng;
 
 import com.intellij.codeInsight.AnnotationUtil;
 import com.intellij.codeInsight.completion.CompletionUtil;
+import com.intellij.codeInsight.lookup.LookupElementBuilder;
 import com.intellij.codeInsight.lookup.LookupValueFactory;
 import com.intellij.codeInspection.InspectionProfile;
 import com.intellij.openapi.project.Project;
@@ -35,7 +36,6 @@ import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
 import com.intellij.psi.*;
 import com.intellij.psi.filters.ElementFilter;
 import com.intellij.psi.filters.position.FilterPattern;
-import com.intellij.psi.impl.source.resolve.reference.PsiReferenceProviderBase;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.ArrayUtil;
@@ -56,26 +56,26 @@ public class TestNGReferenceContributor extends PsiReferenceContributor {
   }
 
   public void registerReferenceProviders(PsiReferenceRegistrar registrar) {
-    registrar.registerReferenceProvider(getElementPattern("dependsOnMethods"), new PsiReferenceProviderBase() {
+    registrar.registerReferenceProvider(getElementPattern("dependsOnMethods"), new PsiReferenceProvider() {
       @NotNull
       public PsiReference[] getReferencesByElement(@NotNull PsiElement element, @NotNull final ProcessingContext context) {
         return new MethodReference[]{new MethodReference((PsiLiteralExpression)element)};
       }
     });
 
-    registrar.registerReferenceProvider(getElementPattern("dataProvider"), new PsiReferenceProviderBase() {
+    registrar.registerReferenceProvider(getElementPattern("dataProvider"), new PsiReferenceProvider() {
       @NotNull
       public PsiReference[] getReferencesByElement(@NotNull PsiElement element, @NotNull final ProcessingContext context) {
         return new DataProviderReference[]{new DataProviderReference((PsiLiteralExpression)element)};
       }
     });
-    registrar.registerReferenceProvider(getElementPattern("groups"), new PsiReferenceProviderBase() {
+    registrar.registerReferenceProvider(getElementPattern("groups"), new PsiReferenceProvider() {
       @NotNull
       public PsiReference[] getReferencesByElement(@NotNull PsiElement element, @NotNull final ProcessingContext context) {
         return new GroupReference[]{new GroupReference(element.getProject(), (PsiLiteralExpression)element)};
       }
     });
-    registrar.registerReferenceProvider(getElementPattern("dependsOnGroups"), new PsiReferenceProviderBase() {
+    registrar.registerReferenceProvider(getElementPattern("dependsOnGroups"), new PsiReferenceProvider() {
       @NotNull
       public PsiReference[] getReferencesByElement(@NotNull PsiElement element, @NotNull final ProcessingContext context) {
         return new GroupReference[]{new GroupReference(element.getProject(), (PsiLiteralExpression)element)};
@@ -98,11 +98,9 @@ public class TestNGReferenceContributor extends PsiReferenceContributor {
         for (PsiMethod method : methods) {
           PsiAnnotation dataProviderAnnotation = AnnotationUtil.findAnnotation(method, DataProvider.class.getName());
           if (dataProviderAnnotation != null) {
-            PsiNameValuePair[] values = dataProviderAnnotation.getParameterList().getAttributes();
-            for (PsiNameValuePair value : values) {
-              if ("name".equals(value.getName()) && val.equals(StringUtil.unquoteString(value.getText()))) {
-                return method;
-              }
+            final PsiAnnotationMemberValue dataProviderMethodName = dataProviderAnnotation.findAttributeValue("name");
+            if (dataProviderMethodName != null && val.equals(StringUtil.unquoteString(dataProviderMethodName.getText()))) {
+              return method;
             }
             if (val.equals(method.getName())) {
               return method;
@@ -132,18 +130,9 @@ public class TestNGReferenceContributor extends PsiReferenceContributor {
           final PsiAnnotation dataProviderAnnotation = AnnotationUtil.findAnnotation(method, DataProvider.class.getName());
           if (dataProviderAnnotation != null) {
             boolean nameFoundInAttributes = false;
-            PsiNameValuePair[] values = dataProviderAnnotation.getParameterList().getAttributes();
-            for (PsiNameValuePair value : values) {
-              if ("name".equals(value.getName())) {
-                final PsiAnnotationMemberValue memberValue = value.getValue();
-                if (memberValue != null) {
-                  list.add(LookupValueFactory.createLookupValue(StringUtil.unquoteString(memberValue.getText()), null));
-                  nameFoundInAttributes = true;
-                  break;
-                }
-              }
-            }
-            if (!nameFoundInAttributes) {
+            final PsiAnnotationMemberValue memberValue = dataProviderAnnotation.findAttributeValue("name");
+            if (memberValue != null) {
+              list.add(LookupValueFactory.createLookupValue(StringUtil.unquoteString(memberValue.getText()), null));
               list.add(LookupValueFactory.createLookupValue(method.getName(), null));
             }
           }
@@ -153,19 +142,14 @@ public class TestNGReferenceContributor extends PsiReferenceContributor {
     }
 
     private PsiClass getProviderClass(final PsiClass topLevelClass) {
-      final PsiAnnotationParameterList parameterList = PsiTreeUtil.getParentOfType(getElement(), PsiAnnotationParameterList.class);
-      if (parameterList != null) {
-        for (PsiNameValuePair nameValuePair : parameterList.getAttributes()) {
-          if (Comparing.strEqual(nameValuePair.getName(), "dataProviderClass")) {
-            final PsiAnnotationMemberValue value = nameValuePair.getValue();
-            if (value instanceof PsiClassObjectAccessExpression) {
-              final PsiTypeElement operand = ((PsiClassObjectAccessExpression)value).getOperand();
-              final PsiClass psiClass = PsiUtil.resolveClassInType(operand.getType());
-              if (psiClass != null) {
-                return psiClass;
-              }
-            }
-            break;
+      final PsiAnnotation annotation = PsiTreeUtil.getParentOfType(getElement(), PsiAnnotation.class);
+      if (annotation != null) {
+        final PsiAnnotationMemberValue value = annotation.findAttributeValue("dataProviderClass");
+        if (value instanceof PsiClassObjectAccessExpression) {
+          final PsiTypeElement operand = ((PsiClassObjectAccessExpression)value).getOperand();
+          final PsiClass psiClass = PsiUtil.resolveClassInType(operand.getType());
+          if (psiClass != null) {
+            return psiClass;
           }
         }
       }
@@ -187,7 +171,7 @@ public class TestNGReferenceContributor extends PsiReferenceContributor {
       if (cls != null) {
         PsiMethod[] methods = cls.findMethodsByName(methodName, true);
         for (PsiMethod method : methods) {
-          if (TestNGUtil.hasTest(method)) {
+          if (TestNGUtil.hasTest(method) || TestNGUtil.hasConfig(method)) {
             return method;
           }
         }
@@ -214,13 +198,15 @@ public class TestNGReferenceContributor extends PsiReferenceContributor {
       final String className = StringUtil.getPackageName(val);
       PsiClass cls = getDependsClass(val);
       if (cls != null) {
-        PsiMethod current = PsiTreeUtil.getParentOfType(getElement(), PsiMethod.class);
-        PsiMethod[] methods = cls.getMethods();
+        final PsiMethod current = PsiTreeUtil.getParentOfType(getElement(), PsiMethod.class);
+        final String configAnnotation = TestNGUtil.getConfigAnnotation(current);
+        final PsiMethod[] methods = cls.getMethods();
         for (PsiMethod method : methods) {
-          if (current != null && method.getName().equals(current.getName())) continue;
-          if (TestNGUtil.hasTest(method) || TestNGUtil.hasConfig(method)) {
-            list.add(LookupValueFactory.createLookupValue(StringUtil.isEmpty(className) ? method.getName()
-                                                                                        :StringUtil.getQualifiedName(cls.getQualifiedName(), method.getName()), null));
+          final String methodName = method.getName();
+          if (current != null && methodName.equals(current.getName())) continue;
+          if (configAnnotation == null && TestNGUtil.hasTest(method) || configAnnotation != null && AnnotationUtil.isAnnotated(method, configAnnotation, true)) {
+            final String nameToInsert = StringUtil.isEmpty(className) ? methodName : StringUtil.getQualifiedName(cls.getQualifiedName(), methodName);
+            list.add(LookupElementBuilder.create(nameToInsert));
           }
         }
       }

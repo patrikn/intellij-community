@@ -50,6 +50,7 @@ import com.intellij.psi.impl.source.tree.FileElement;
 import com.intellij.psi.impl.source.tree.LeafElement;
 import com.intellij.psi.impl.source.tree.TreeElement;
 import com.intellij.psi.impl.source.tree.TreeUtil;
+import com.intellij.psi.injection.ReferenceInjector;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtilCore;
@@ -79,6 +80,7 @@ public class MultiHostRegistrarImpl implements MultiHostRegistrar, ModificationT
   private final VirtualFile myHostVirtualFile;
   private final PsiElement myContextElement;
   private final PsiFile myHostPsiFile;
+  private ReferenceInjector myReferenceInjector;
 
   MultiHostRegistrarImpl(@NotNull Project project,
                          @NotNull PsiFile hostPsiFile,
@@ -115,7 +117,12 @@ public class MultiHostRegistrarImpl implements MultiHostRegistrar, ModificationT
     }
 
     if (LanguageParserDefinitions.INSTANCE.forLanguage(language) == null) {
-      throw new UnsupportedOperationException("Cannot inject language '" + language + "' since its getParserDefinition() returns null");
+      ReferenceInjector injector = ReferenceInjector.findById(language.getID());
+      if (injector == null) {
+        throw new UnsupportedOperationException("Cannot inject language '" + language + "' since its getParserDefinition() returns null");
+      }
+      myLanguage = null;
+      myReferenceInjector = injector;
     }
     myLanguage = language;
 
@@ -148,7 +155,7 @@ public class MultiHostRegistrarImpl implements MultiHostRegistrar, ModificationT
       throw new IllegalArgumentException("rangeInsideHost must lie within host text range. rangeInsideHost:"+rangeInsideHost+"; host textRange:"+
                                          hostTextRange);
     }
-    if (myLanguage == null) {
+    if (myLanguage == null && myReferenceInjector == null) {
       clear();
       throw new IllegalStateException("Seems you haven't called startInjecting()");
     }
@@ -172,7 +179,7 @@ public class MultiHostRegistrarImpl implements MultiHostRegistrar, ModificationT
       assert after >= before : "Escaper " + textEscaper + "("+textEscaper.getClass()+") must not mangle char buffer";
       if (!result) {
         // if there are invalid chars, adjust the range
-        int offsetInHost = textEscaper.getOffsetInHost(outChars.length() - startOffset, rangeInsideHost);
+        int offsetInHost = textEscaper.getOffsetInHost(outChars.length() - before, rangeInsideHost);
         relevantRange = relevantRange.intersection(new ProperTextRange(0, offsetInHost));
       }
     }
@@ -191,6 +198,10 @@ public class MultiHostRegistrarImpl implements MultiHostRegistrar, ModificationT
     try {
       if (shreds.isEmpty()) {
         throw new IllegalStateException("Seems you haven't called addPlace()");
+      }
+      if (myReferenceInjector != null) {
+        addToResults(new Place(shreds), null);
+        return;
       }
       PsiDocumentManagerImpl documentManager = (PsiDocumentManagerImpl)PsiDocumentManager.getInstance(myProject);
       //todo restore
@@ -354,7 +365,12 @@ public class MultiHostRegistrarImpl implements MultiHostRegistrar, ModificationT
     PsiDocumentManagerImpl.checkConsistency(psiFile, documentWindow);
   }
 
-  void addToResults(Place place, PsiFile psiFile) {
+  void addToResults(Place place, PsiFile psiFile, MultiHostRegistrarImpl from) {
+    addToResults(place, psiFile);
+    myReferenceInjector = from.myReferenceInjector;
+  }
+
+  private void addToResults(Place place, PsiFile psiFile) {
     if (result == null) {
       result = new SmartList<Pair<Place, PsiFile>>();
     }
@@ -481,12 +497,12 @@ public class MultiHostRegistrarImpl implements MultiHostRegistrar, ModificationT
         }
         //in prefix/suffix or spills over to next fragment
         if (range.getStartOffset() < prevHostEndOffset + prefixLength) {
-          range = new TextRange(prevHostEndOffset + prefixLength, range.getEndOffset());
+          range = new UnfairTextRange(prevHostEndOffset + prefixLength, range.getEndOffset());
         }
         TextRange spilled = null;
         if (range.getEndOffset() > shredEndOffset - suffixLength) {
-          spilled = new TextRange(shredEndOffset, range.getEndOffset());
-          range = new TextRange(range.getStartOffset(), shredEndOffset-suffixLength);
+          spilled = new UnfairTextRange(shredEndOffset, range.getEndOffset());
+          range = new UnfairTextRange(range.getStartOffset(), shredEndOffset-suffixLength);
         }
         if (!range.isEmpty()) {
           int start = escaper.getOffsetInHost(range.getStartOffset() - prevHostEndOffset - prefixLength, rangeInsideHost);
@@ -521,5 +537,14 @@ public class MultiHostRegistrarImpl implements MultiHostRegistrar, ModificationT
   @Override
   public String toString() {
     return result.toString();
+  }
+
+  @NotNull
+  public PsiFile getHostPsiFile() {
+    return myHostPsiFile;
+  }
+
+  public ReferenceInjector getReferenceInjector() {
+    return myReferenceInjector;
   }
 }

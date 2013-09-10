@@ -98,7 +98,14 @@ public final class LoadTextUtil {
       detectedLineSeparator = "\n";
     }
 
-    CharSequence result = buffer.length() == dst ? buffer : buffer.subSequence(0, dst);
+    CharSequence result;
+    if (buffer.length() == dst) {
+      result = buffer;
+    }
+    else {
+      // in Mac JDK CharBuffer.subSequence() signature differs from Oracle
+      result = buffer.subSequence(0, dst);
+    }
     return Pair.create(result, detectedLineSeparator);
   }
 
@@ -217,12 +224,9 @@ public final class LoadTextUtil {
    * <p/>
    * Normally you should not use this method.
    *
-   * @param project
-   * @param virtualFile
    * @param requestor            any object to control who called this method. Note that
    *                             it is considered to be an external change if <code>requestor</code> is <code>null</code>.
    *                             See {@link com.intellij.openapi.vfs.VirtualFileEvent#getRequestor}
-   * @param text
    * @param newModificationStamp new modification stamp or -1 if no special value should be set @return <code>Writer</code>
    * @throws java.io.IOException if an I/O error occurs
    * @see VirtualFile#getModificationStamp()
@@ -286,8 +290,6 @@ public final class LoadTextUtil {
     try {
       if (existing == null) return Pair.create(specified, toBytes(text, specified));
       if (specified == null || specified.equals(existing)) return Pair.create(specified, toBytes(text, existing));
-      if (existing == null) return Pair.create(specified, toBytes(text, specified));
-      if (specified == null || specified.equals(existing)) return Pair.create(specified, toBytes(text, existing));
 
       byte[] out = isSupported(specified, text);
       if (out != null) return Pair.create(specified, out); //if explicitly specified encoding is safe, return it
@@ -349,7 +351,9 @@ public final class LoadTextUtil {
       return convertLineSeparators(buffer).first;
     }
 
-    assert !file.isDirectory() : "'"+file.getPresentableUrl() + "' is directory";
+    if (file.isDirectory()) {
+      throw new AssertionError("'" + file.getPresentableUrl() + "' is directory");
+    }
     final FileType fileType = file.getFileType();
 
     if (fileType.isBinary()) {

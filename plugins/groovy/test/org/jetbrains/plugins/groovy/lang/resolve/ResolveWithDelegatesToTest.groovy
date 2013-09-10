@@ -25,6 +25,35 @@ class ResolveWithDelegatesToTest extends LightGroovyTestCase {
   @Override
   protected String getBasePath() { null }
 
+  @Override
+  public void setUp() throws Exception {
+    super.setUp();
+
+    myFixture.addClass('''\
+package groovy.lang;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.PARAMETER})
+public @interface DelegatesTo {
+    Class value() default Target.class;
+    int strategy() default Closure.OWNER_FIRST;
+
+    String target() default "";
+
+    @Retention(RetentionPolicy.RUNTIME)
+    @java.lang.annotation.Target({ElementType.PARAMETER})
+    public static @interface Target {
+        String value() default ""; // optional id
+    }
+}
+''')
+  }
+
   void testShouldChooseMethodFromOwner() {
     assertScript '''
             class Delegate {
@@ -581,6 +610,49 @@ test()
 
 ''', 'HashMap'
   }
+
+  void testTarget() {
+    assertScript('''
+def foo(@DelegatesTo.Target def o, @DelegatesTo Closure c) {}
+
+foo(4) {
+  intVal<caret>ue()
+}
+''', 'Integer')
+  }
+
+  void testTarget2() {
+    assertScript('''
+def foo(@DelegatesTo.Target('t') def o, @DelegatesTo(target = 't') Closure c) {}
+
+foo(4) {
+  intVal<caret>ue()
+}
+''', 'Integer')
+  }
+
+  void testGenericTypeIndex() {
+    addLinkedHashMap()
+    assertScript('''\
+public <K, V> void foo(@DelegatesTo.Target Map<K, V> map, @DelegatesTo(genericTypeIndex = 1) Closure c) {}
+
+foo([1:'ab', 2:'cde']) {
+  sub<caret>string(1)
+}
+''', 'String')
+  }
+
+  void testGenericTypeIndex1() {
+    addLinkedHashMap()
+    assertScript('''\
+public <K, V> void foo(@DelegatesTo.Target Map<K, V> map, @DelegatesTo(genericTypeIndex = 0) Closure c) {}
+
+foo([1:'ab', 2:'cde']) {
+  sub<caret>string(1)
+}
+''', 'String')
+  }
+
 
   void assertScript(String text, String resolvedClass) {
     myFixture.configureByText('_a.groovy', text)

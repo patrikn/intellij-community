@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,11 +57,12 @@ import java.util.regex.Pattern;
  */
 public class GradlePositionManager extends ScriptPositionManagerHelper {
 
-  private static final Logger                                     LOG                  =
-    Logger.getInstance("#org.jetbrains.plugins.gradle.config.GradlePositionManager");
-  private static final Pattern                                    GRADLE_CLASS_PATTERN = Pattern.compile(".*_gradle_.*");
-  private static final Key<CachedValue<ClassLoader>>              GRADLE_CLASS_LOADER  = Key.create("GRADLE_CLASS_LOADER");
-  private static final Key<CachedValue<FactoryMap<File, String>>> GRADLE_CLASS_NAME    = Key.create("GRADLE_CLASS_NAME");
+  private static final Logger LOG = Logger.getInstance("#org.jetbrains.plugins.gradle.config.GradlePositionManager");
+
+  private static final Pattern                                    GRADLE_CLASS_PATTERN  = Pattern.compile(".*_gradle_.*");
+  private static final String                                     SCRIPT_CLOSURE_PREFIX = "build_";
+  private static final Key<CachedValue<ClassLoader>>              GRADLE_CLASS_LOADER   = Key.create("GRADLE_CLASS_LOADER");
+  private static final Key<CachedValue<FactoryMap<File, String>>> GRADLE_CLASS_NAME     = Key.create("GRADLE_CLASS_NAME");
 
   private final GradleInstallationManager myLibraryManager;
 
@@ -70,7 +71,7 @@ public class GradlePositionManager extends ScriptPositionManagerHelper {
   }
 
   public boolean isAppropriateRuntimeName(@NotNull final String runtimeName) {
-    return GRADLE_CLASS_PATTERN.matcher(runtimeName).matches();
+    return runtimeName.startsWith(SCRIPT_CLOSURE_PREFIX) || GRADLE_CLASS_PATTERN.matcher(runtimeName).matches();
   }
 
   public boolean isAppropriateScriptFile(@NotNull final PsiFile scriptFile) {
@@ -121,8 +122,8 @@ public class GradlePositionManager extends ScriptPositionManagerHelper {
   private ClassLoader getGradleClassLoader(@NotNull final Module module) {
     final Project project = module.getProject();
     return CachedValuesManager.getManager(project).getCachedValue(module, GRADLE_CLASS_LOADER, new CachedValueProvider<ClassLoader>() {
-        public Result<ClassLoader> compute() {
-          return Result.create(createGradleClassLoader(module), ProjectRootManager.getInstance(project));
+      public Result<ClassLoader> compute() {
+        return Result.create(createGradleClassLoader(module), ProjectRootManager.getInstance(project));
         }
       }, false);
   }
@@ -148,7 +149,7 @@ public class GradlePositionManager extends ScriptPositionManagerHelper {
       }
     }
 
-    return new UrlClassLoader(urls, null);
+    return UrlClassLoader.build().urls(urls).get();
   }
 
   private class ScriptSourceMapCalculator implements CachedValueProvider<FactoryMap<File, String>> {

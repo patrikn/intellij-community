@@ -17,15 +17,12 @@ package com.intellij.codeInsight.daemon.impl.analysis;
 
 import com.intellij.BundleBase;
 import com.intellij.codeInsight.daemon.*;
-import com.intellij.codeInsight.daemon.impl.HighlightInfo;
-import com.intellij.codeInsight.daemon.impl.HighlightInfoType;
-import com.intellij.codeInsight.daemon.impl.HighlightVisitor;
-import com.intellij.codeInsight.daemon.impl.SeverityRegistrar;
+import com.intellij.codeInsight.daemon.impl.*;
 import com.intellij.codeInsight.daemon.impl.quickfix.QuickFixAction;
 import com.intellij.codeInsight.daemon.impl.quickfix.QuickFixActionRegistrarImpl;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInsight.quickfix.UnresolvedReferenceQuickFixProvider;
-import com.intellij.codeInspection.InspectionProfile;
+import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.htmlInspections.RequiredAttributesInspection;
 import com.intellij.codeInspection.htmlInspections.XmlEntitiesInspection;
 import com.intellij.lang.ASTNode;
@@ -33,6 +30,7 @@ import com.intellij.lang.dtd.DTDLanguage;
 import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.markup.TextAttributes;
+import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.TextRange;
@@ -50,6 +48,7 @@ import com.intellij.psi.xml.*;
 import com.intellij.xml.XmlAttributeDescriptor;
 import com.intellij.xml.XmlElementDescriptor;
 import com.intellij.xml.XmlExtension;
+import com.intellij.xml.XmlUndefinedElementFixProvider;
 import com.intellij.xml.impl.schema.AnyXmlElementDescriptor;
 import com.intellij.xml.util.AnchorReference;
 import com.intellij.xml.util.HtmlUtil;
@@ -65,7 +64,7 @@ import java.util.StringTokenizer;
 /**
  * @author Mike
  */
-public class XmlHighlightVisitor extends XmlElementVisitor implements HighlightVisitor, Validator.ValidationHost {
+public class XmlHighlightVisitor extends XmlElementVisitor implements HighlightVisitor, IdeValidationHost {
   private static final Logger LOG = Logger.getInstance("com.intellij.codeInsight.daemon.impl.analysis.XmlHighlightVisitor");
   private static final UserDataCache<Boolean, PsiElement, Object> DO_NOT_VALIDATE =
     new UserDataCache<Boolean, PsiElement, Object>("do not validate") {
@@ -321,16 +320,16 @@ public class XmlHighlightVisitor extends XmlElementVisitor implements HighlightV
           final String localizedMessage = XmlErrorMessages.message("element.doesnt.have.required.attribute", name, attrName);
           final InspectionProfile profile = InspectionProjectProfileManager.getInstance(tag.getProject()).getInspectionProfile();
           RequiredAttributesInspection inspection =
-            (RequiredAttributesInspection)profile.getUnwrappedTool(RequiredAttributesInspection.SHORT_NAME, tag);
+            (RequiredAttributesInspection)profile.getUnwrappedTool(XmlEntitiesInspection.REQUIRED_ATTRIBUTES_SHORT_NAME, tag);
           if (inspection != null) {
             reportOneTagProblem(
               tag,
               attrName,
               localizedMessage,
               insertRequiredAttributeIntention,
-              HighlightDisplayKey.find(RequiredAttributesInspection.SHORT_NAME),
+              HighlightDisplayKey.find(XmlEntitiesInspection.REQUIRED_ATTRIBUTES_SHORT_NAME),
               inspection,
-              XmlEntitiesInspection.NOT_REQUIRED_ATTRIBUTE
+              inspection.getIntentionAction(attrName)
             );
           }
         }
@@ -344,24 +343,23 @@ public class XmlHighlightVisitor extends XmlElementVisitor implements HighlightV
                                    final IntentionAction basicIntention,
                                    final HighlightDisplayKey key,
                                    final XmlEntitiesInspection inspection,
-                                   final int type) {
+                                   final IntentionAction addAttributeFix) {
     boolean htmlTag = false;
 
     if (tag instanceof HtmlTag) {
       htmlTag = true;
-      if(isAdditionallyDeclared(inspection.getAdditionalEntries(type), name)) return;
+      if(isAdditionallyDeclared(inspection.getAdditionalEntries(), name)) return;
     }
 
     final InspectionProfile profile = InspectionProjectProfileManager.getInstance(tag.getProject()).getInspectionProfile();
-    final IntentionAction intentionAction = inspection.getIntentionAction(name, type);
     if (htmlTag && profile.isToolEnabled(key, tag)) {
       addElementsForTagWithManyQuickFixes(
         tag,
         localizedMessage,
         isInjectedHtmlTagForWhichNoProblemsReporting((HtmlTag)tag) ?
           HighlightInfoType.INFORMATION :
-          SeverityRegistrar.getInstance(tag.getProject()).getHighlightInfoTypeBySeverity(profile.getErrorLevel(key, tag).getSeverity()),
-        intentionAction,
+          SeverityRegistrar.getSeverityRegistrar(tag.getProject()).getHighlightInfoTypeBySeverity(profile.getErrorLevel(key, tag).getSeverity()),
+        addAttributeFix,
         basicIntention);
     } else if (!htmlTag) {
       addElementsForTag(
@@ -413,6 +411,7 @@ public class XmlHighlightVisitor extends XmlElementVisitor implements HighlightV
 
   private void checkAttribute(XmlAttribute attribute) {
     XmlTag tag = attribute.getParent();
+    if (tag == null) return;
 
     final String name = attribute.getName();
 
@@ -455,7 +454,15 @@ public class XmlHighlightVisitor extends XmlElementVisitor implements HighlightV
         if (highlightInfo != null) {
           PsiFile file = tag.getContainingFile();
           if (file != null) {
-            XmlExtension.getExtension(file).createAddAttributeFix(attribute, highlightInfo);
+            for (XmlUndefinedElementFixProvider fixProvider : Extensions.getExtensions(XmlUndefinedElementFixProvider.EP_NAME)) {
+              IntentionAction[] fixes = fixProvider.createFixes(attribute);
+              if (fixes != null) {
+                for (IntentionAction action : fixes) {
+                  QuickFixAction.registerQuickFixAction(highlightInfo, action);
+                }
+                break;
+              }
+            }
           }
         }
       }
@@ -610,7 +617,17 @@ public class XmlHighlightVisitor extends XmlElementVisitor implements HighlightV
         .range(startOffset + referenceRange.getStartOffset(), startOffset + referenceRange.getEndOffset())
         .descriptionAndTooltip(description).create();
       addToResults(info);
-      if (reference instanceof QuickFixProvider) ((QuickFixProvider)reference).registerQuickfix(info, reference);
+      if (reference instanceof LocalQuickFixProvider) {
+        LocalQuickFix[] fixes = ((LocalQuickFixProvider)reference).getQuickFixes();
+        if (fixes != null) {
+          InspectionManager manager = InspectionManager.getInstance(reference.getElement().getProject());
+          for (LocalQuickFix fix : fixes) {
+            ProblemDescriptor descriptor = manager.createProblemDescriptor(value, description, fix,
+                                                                           ProblemHighlightType.GENERIC_ERROR_OR_WARNING, true);
+            QuickFixAction.registerQuickFixAction(info, new LocalQuickFixAsIntentionAdapter(fix, descriptor));
+          }
+        }
+      }
       UnresolvedReferenceQuickFixProvider.registerReferenceFixes(reference, new QuickFixActionRegistrarImpl(info));
     }
   }
@@ -670,13 +687,18 @@ public class XmlHighlightVisitor extends XmlElementVisitor implements HighlightV
         addElementsForTag((XmlTag)context, message, infoType, null);
       }
       else {
-        addToResults(HighlightInfo.newHighlightInfo(HighlightInfoType.WRONG_REF).range(context).descriptionAndTooltip(message).create());
+        addToResults(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(context).descriptionAndTooltip(message).create());
       }
     }
   }
 
   @Override
-  public void addMessage(final PsiElement context, final String message, final ErrorType type, final IntentionAction... fixes) {
+  public void addMessage(PsiElement context, String message, @NotNull ErrorType type) {
+    addMessageWithFixes(context, message, type);
+  }
+
+  @Override
+  public void addMessageWithFixes(final PsiElement context, final String message, @NotNull final ErrorType type, final IntentionAction... fixes) {
     if (message != null && !message.isEmpty()) {
       final PsiFile containingFile = context.getContainingFile();
       final HighlightInfoType defaultInfoType = type == ErrorType.ERROR ? HighlightInfoType.ERROR : type == ErrorType.WARNING ? HighlightInfoType.WARNING : HighlightInfoType.WEAK_WARNING;

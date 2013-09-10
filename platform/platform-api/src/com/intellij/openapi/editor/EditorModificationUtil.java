@@ -200,17 +200,18 @@ public class EditorModificationUtil {
         String[] lines = LineTokenizer.tokenize(s.toCharArray(), false);
         if (lines.length > 1 || selectedLinesCount == 0) {
           int longestLineLength = 0;
-          for (String line : lines) {
+          for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
             longestLineLength = Math.max(longestLineLength, line.length());
+            editor.getCaretModel().moveToLogicalPosition(new LogicalPosition(caretLine + i, caretToRestore.column));
             insertStringAtCaret(editor, line, false, true);
-            editor.getCaretModel().moveCaretRelatively(-line.length(), 1, false, false, true);
           }
           caretToRestore = new LogicalPosition(originalCaretLine, caretToRestore.column + longestLineLength);
         }
         else {
           for (int i = 0; i <= selectedLinesCount; i++) {
+            editor.getCaretModel().moveToLogicalPosition(new LogicalPosition(caretLine + i, caretToRestore.column));
             insertStringAtCaret(editor, s, false, true);
-            editor.getCaretModel().moveCaretRelatively(-s.length(), 1, false, false, true);
           }
           caretToRestore = new LogicalPosition(originalCaretLine, caretToRestore.column + s.length());
         }
@@ -282,41 +283,45 @@ public class EditorModificationUtil {
   public static String calcStringToFillVirtualSpace(Editor editor) {
     int afterLineEnd = calcAfterLineEnd(editor);
     if (afterLineEnd > 0) {
-      final Project project = editor.getProject();
-      StringBuilder buf = new StringBuilder();
-      final Document doc = editor.getDocument();
-      final int caretOffset = editor.getCaretModel().getOffset();
-      boolean atLineStart = caretOffset >= doc.getTextLength() || doc.getLineStartOffset(doc.getLineNumber(caretOffset)) == caretOffset;
-      if (atLineStart && project != null) {
-        int offset = editor.getCaretModel().getOffset();
-        PsiDocumentManager.getInstance(project).commitDocument(doc); // Sync document and PSI before formatting.
-        String properIndent = offset >= doc.getTextLength() ? "" : CodeStyleFacade.getInstance(project).getLineIndent(doc, offset);
-        if (properIndent != null) {
-          int tabSize = editor.getSettings().getTabSize(project);
-          for (int i = 0; i < properIndent.length(); i++) {
-            if (properIndent.charAt(i) == ' ') {
-              afterLineEnd--;
-            }
-            else if (properIndent.charAt(i) == '\t') {
-              if (afterLineEnd < tabSize) {
-                break;
-              }
-              afterLineEnd -= tabSize;
-            }
-            buf.append(properIndent.charAt(i));
-            if (afterLineEnd == 0) break;
-          }
-        }
-      }
-
-      for (int i = 0; i < afterLineEnd; i++) {
-        buf.append(' ');
-      }
-
-      return buf.toString();
+      return calcStringToFillVirtualSpace(editor, afterLineEnd);
     }
 
     return "";
+  }
+
+  public static String calcStringToFillVirtualSpace(Editor editor, int afterLineEnd) {
+    final Project project = editor.getProject();
+    StringBuilder buf = new StringBuilder();
+    final Document doc = editor.getDocument();
+    final int caretOffset = editor.getCaretModel().getOffset();
+    boolean atLineStart = caretOffset >= doc.getTextLength() || doc.getLineStartOffset(doc.getLineNumber(caretOffset)) == caretOffset;
+    if (atLineStart && project != null) {
+      int offset = editor.getCaretModel().getOffset();
+      PsiDocumentManager.getInstance(project).commitDocument(doc); // Sync document and PSI before formatting.
+      String properIndent = offset >= doc.getTextLength() ? "" : CodeStyleFacade.getInstance(project).getLineIndent(doc, offset);
+      if (properIndent != null) {
+        int tabSize = editor.getSettings().getTabSize(project);
+        for (int i = 0; i < properIndent.length(); i++) {
+          if (properIndent.charAt(i) == ' ') {
+            afterLineEnd--;
+          }
+          else if (properIndent.charAt(i) == '\t') {
+            if (afterLineEnd < tabSize) {
+              break;
+            }
+            afterLineEnd -= tabSize;
+          }
+          buf.append(properIndent.charAt(i));
+          if (afterLineEnd == 0) break;
+        }
+      }
+    }
+
+    for (int i = 0; i < afterLineEnd; i++) {
+      buf.append(' ');
+    }
+
+    return buf.toString();
   }
 
   public static void typeInStringAtCaretHonorBlockSelection(final Editor editor, final String str, final boolean toProcessOverwriteMode)

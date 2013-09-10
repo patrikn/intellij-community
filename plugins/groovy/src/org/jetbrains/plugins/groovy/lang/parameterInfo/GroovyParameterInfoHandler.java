@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import com.intellij.codeInsight.completion.JavaCompletionUtil;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.lang.parameterInfo.*;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -49,6 +50,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.types.GrClosureParameter;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrClosureType;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyResolveResultImpl;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
+import org.jetbrains.plugins.groovy.lang.psi.util.GrInnerClassConstructorUtil;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil;
 
@@ -240,6 +242,7 @@ public class GroovyParameterInfoHandler implements ParameterInfoHandlerWithTabAc
         if (namedElement instanceof PsiMethod) {
           final PsiMethod method = (PsiMethod)namedElement;
           PsiParameter[] parameters = method.getParameterList().getParameters();
+          parameters = updateConstructorParams(method, parameters, context.getParameterOwner());
           parameterTypes = new PsiType[parameters.length];
           for (int j = 0; j < parameters.length; j++) {
             parameterTypes[j] = parameters[j].getType();
@@ -363,7 +366,9 @@ public class GroovyParameterInfoHandler implements ParameterInfoHandlerWithTabAc
         buffer.append('(');
       }
 
-      final PsiParameter[] params = method.getParameterList().getParameters();
+      PsiParameter[] params = method.getParameterList().getParameters();
+
+      params = updateConstructorParams(method, params, context.getParameterOwner());
 
       int numParams = params.length;
       if (numParams > 0) {
@@ -413,6 +418,8 @@ public class GroovyParameterInfoHandler implements ParameterInfoHandlerWithTabAc
           else {
             buffer.append(psiType.getPresentableText());
           }
+          buffer.append(' ').append(parameters[i].getName() != null ? parameters[i].getName() : "<unknown>");
+
           int endOffset = buffer.length();
 
           if (context.isUIComponentEnabled() &&
@@ -435,14 +442,23 @@ public class GroovyParameterInfoHandler implements ParameterInfoHandlerWithTabAc
     final boolean isDeprecated = o instanceof PsiDocCommentOwner && ((PsiDocCommentOwner) o).isDeprecated();
 
     context.setupUIComponentPresentation(
-        buffer.toString(),
-        highlightStartOffset,
-        highlightEndOffset,
-        !context.isUIComponentEnabled(),
-        isDeprecated,
-        false,
-        context.getDefaultParameterColor()
+      StringUtil.escapeXml(buffer.toString()),
+      highlightStartOffset,
+      highlightEndOffset,
+      !context.isUIComponentEnabled(),
+      isDeprecated,
+      false,
+      context.getDefaultParameterColor()
     );
+  }
+
+  private static PsiParameter[] updateConstructorParams(PsiMethod method, PsiParameter[] params, PsiElement place) {
+    if (GrInnerClassConstructorUtil.isInnerClassConstructorUsedOutsideOfItParent(method, place)) {
+      GrMethod grMethod = (GrMethod)method;
+      params = GrInnerClassConstructorUtil
+        .addEnclosingInstanceParam(grMethod, method.getContainingClass().getContainingClass(), grMethod.getParameters(), true);
+    }
+    return params;
   }
 
   private static void appendParameterText(PsiParameter param, PsiSubstitutor substitutor, StringBuilder buffer) {

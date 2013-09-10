@@ -106,6 +106,8 @@ public class CompleteStatementTest extends EditorActionTestCase {
 
   public void testMethod() throws Exception { doTest(); }
 
+  public void testClass() throws Exception { doTest(); }
+
   public void testCompleteElseIf() throws Exception { doTest(); }
 
   public void testCompleteStringLiteral() throws Exception {
@@ -205,6 +207,7 @@ public class CompleteStatementTest extends EditorActionTestCase {
   public void testIDEADEV40479() throws Exception { doTest(); }
 
   public void testMultilineReturn() throws Exception { doTest(); }
+  public void testMultilineCall() throws Exception { doTest(); }
 
   public void testIDEADEV13019() throws Exception {
     doTestBracesNextLineStyle();

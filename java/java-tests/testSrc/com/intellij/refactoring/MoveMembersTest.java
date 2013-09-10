@@ -107,6 +107,10 @@ public class MoveMembersTest extends MultiFileTestCase {
     doTest("B", "A", 0);
   }
 
+  public void testStringConstantFromCaseStatement() throws Exception {
+    doTest("B", "A", 0);
+  }
+
   public void testDependantFields() throws Exception {
     doTest("B", "A", 0);
   }
@@ -122,6 +126,16 @@ public class MoveMembersTest extends MultiFileTestCase {
     }
     catch (BaseRefactoringProcessor.ConflictsInTestsException e) {
       assertEquals("Field <b><code>B.ONE</code></b> has write access but is moved to an interface", e.getMessage());
+    }
+  }
+  
+  public void testFinalFieldWithInitializer() throws Exception {
+    try {
+      doTest("B", "A", 0);
+      fail("conflict expected");
+    }
+    catch (BaseRefactoringProcessor.ConflictsInTestsException e) {
+      assertEquals("final variable initializer won't be available after move.", e.getMessage());
     }
   }
 

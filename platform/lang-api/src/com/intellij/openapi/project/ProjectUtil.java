@@ -21,14 +21,8 @@ import com.intellij.openapi.actionSystem.PlatformDataKeys;
 import com.intellij.openapi.fileEditor.UniqueVFilePathBuilder;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.InternalFileType;
-import com.intellij.openapi.module.Module;
-import com.intellij.openapi.module.ModuleUtil;
-import com.intellij.openapi.roots.JdkOrderEntry;
-import com.intellij.openapi.roots.OrderEntry;
-import com.intellij.openapi.roots.libraries.LibraryUtil;
-import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFilePathWrapper;
 import org.jetbrains.annotations.NonNls;
@@ -66,7 +60,7 @@ public class ProjectUtil {
                                                  final boolean keepModuleAlwaysOnTheLeft) {
     if (file instanceof VirtualFilePathWrapper) {
       return includeFilePath ? ((VirtualFilePathWrapper)file).getPresentablePath() : file.getName();
-    }    
+    }
     String url;
     if (includeFilePath) {
       url = file.getPresentableUrl();
@@ -80,38 +74,7 @@ public class ProjectUtil {
     if (project == null) {
       return url;
     }
-    else {
-      final VirtualFile baseDir = project.getBaseDir();
-      if (baseDir != null && includeFilePath) {
-        //noinspection ConstantConditions
-        final String projectHomeUrl = baseDir.getPresentableUrl();
-        if (url.startsWith(projectHomeUrl)) {
-          url = "..." + url.substring(projectHomeUrl.length());
-        }
-      }
-
-      if (SystemInfo.isMac && file.getFileSystem() instanceof JarFileSystem) {
-        final VirtualFile fileForJar = ((JarFileSystem)file.getFileSystem()).getVirtualFileForJar(file);
-        if (fileForJar != null) {
-          final OrderEntry libraryEntry = LibraryUtil.findLibraryEntry(file, project);
-          if (libraryEntry != null) {
-            if (libraryEntry instanceof JdkOrderEntry) {
-              url = url + " - [" + ((JdkOrderEntry)libraryEntry).getJdkName() + "]";
-            } else {
-              url = url + " - [" + libraryEntry.getPresentableName() + "]";
-            }
-          } else {
-            url = url + " - [" + fileForJar.getName() + "]";
-          }
-        }
-      }
-
-      final Module module = ModuleUtil.findModuleForFile(file, project);
-      if (module == null) return url;
-      return !keepModuleAlwaysOnTheLeft && SystemInfo.isMac ?
-             url + " - [" + module.getName() + "]" :
-             "[" + module.getName() + "] - " + url;
-    }
+    return ProjectUtilCore.displayUrlRelativeToProject(file, url, project, includeFilePath, keepModuleAlwaysOnTheLeft);
   }
 
   public static String calcRelativeToProjectPath(final VirtualFile file, final Project project) {
@@ -121,6 +84,22 @@ public class ProjectUtil {
   @Nullable
   public static Project guessProjectForFile(VirtualFile file) {
     return ProjectLocator.getInstance().guessProjectForFile(file);
+  }
+
+  @Nullable
+  // guessProjectForFile works incorrectly - even if file is config (idea config file) first opened project will be returned
+  public static Project guessProjectForContentFile(@NotNull VirtualFile file) {
+    if (isProjectOrWorkspaceFile(file)) {
+      return null;
+    }
+
+    for (Project project : ProjectManager.getInstance().getOpenProjects()) {
+      if (!project.isDefault() && project.isInitialized() && !project.isDisposed() && ProjectRootManager.getInstance(project).getFileIndex().isInContent(file)) {
+        return project;
+      }
+    }
+
+    return null;
   }
 
   public static boolean isProjectOrWorkspaceFile(final VirtualFile file) {

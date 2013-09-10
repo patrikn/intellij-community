@@ -164,6 +164,8 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
   }
 
   public void method(Map<Object, Object> args) {
+    if (args == null) return;
+
     parseMethod(args);
     args.put("declarationType", DeclarationType.METHOD);
     myDeclarations.add(args);
@@ -176,11 +178,9 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
     if (isMethodCall(place, parent)) {
       assert parent instanceof GrMethodCall && place instanceof GrReferenceExpression;
 
-      GrMethodCall call = (GrMethodCall)parent;
       GrReferenceExpression ref = (GrReferenceExpression)place;
 
-      PsiType[] argTypes =
-        PsiUtil.getArgumentTypes(call.getNamedArguments(), call.getExpressionArguments(), call.getClosureArguments(), false, null, false);
+      PsiType[] argTypes = PsiUtil.getArgumentTypes(ref, false);
       if (argTypes == null) return;
 
       String[] types = new String[argTypes.length];
@@ -251,6 +251,8 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
 
   @SuppressWarnings("UnusedDeclaration")
   public void closureInMethod(Map<Object, Object> args) {
+    if (args == null) return;
+
     parseMethod(args);
     final Object method = args.get("method");
     if (method instanceof Map) {
@@ -261,6 +263,8 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
   }
 
   public void variable(Map<Object, Object> args) {
+    if (args == null) return;
+
     parseVariable(args);
     myDeclarations.add(args);
   }

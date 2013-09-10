@@ -62,7 +62,7 @@ public final class HgCommandExecutor {
   private final HgVcs myVcs;
   private final String myDestination;
 
-  private Charset myCharset = HgEncodingUtil.getDefaultCharset();
+  @NotNull private Charset myCharset;
   private boolean myIsSilent = false;
   private boolean myShowOutput = false;
   private List<String> myOptions = DEFAULT_OPTIONS;
@@ -81,10 +81,13 @@ public final class HgCommandExecutor {
     myVcs = HgVcs.getInstance(project);
     myDestination = destination;
     myState = state;
+    myCharset = HgEncodingUtil.getDefaultCharset(myProject);
   }
 
-  public void setCharset(Charset charset) {
-    myCharset = charset;
+  public void setCharset(@Nullable Charset charset) {
+    if (charset != null) {
+      myCharset = charset;
+    }
   }
 
   public void setSilent(boolean isSilent) {
@@ -190,11 +193,16 @@ public final class HgCommandExecutor {
     if (arguments != null && arguments.size() != 0) {
       cmdLine.addAll(arguments);
     }
-    ShellCommand shellCommand = new ShellCommand(myVcs.getGlobalSettings().isRunViaBash());
+    if (HgVcs.HGENCODING == null) {
+      cmdLine.add("--encoding");
+      cmdLine.add(myCharset.name());
+    }
+
     HgCommandResult result;
     try {
       String workingDir = repo != null ? repo.getPath() : null;
-      result = shellCommand.execute(cmdLine, workingDir, myCharset);
+      ShellCommand shellCommand = new ShellCommand(cmdLine, workingDir, myCharset);
+      result = shellCommand.execute();
       if (!HgErrorUtil.isAuthorizationError(result)) {
         passReceiver.saveCredentials();
       }
@@ -231,8 +239,7 @@ public final class HgCommandExecutor {
     final int lastSlashIndex = settings.getHgExecutable().lastIndexOf(File.separator);
     exeName = settings.getHgExecutable().substring(lastSlashIndex + 1);
 
-    final String executable = settings.isRunViaBash() ? "bash -c " + exeName : exeName;
-    final String cmdString = String.format("%s %s %s", executable, operation, arguments == null ? "" : StringUtil.join(arguments, " "));
+    final String cmdString = String.format("%s %s %s", exeName, operation, arguments == null ? "" : StringUtil.join(arguments, " "));
 
     final boolean isUnitTestMode = ApplicationManager.getApplication().isUnitTestMode();
     // log command

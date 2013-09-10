@@ -48,14 +48,15 @@ public class StubTreeBuilder {
 
       final BinaryFileStubBuilder builder = BinaryFileStubBuilders.INSTANCE.forFileType(fileType);
       if (builder != null) {
-        data = builder.buildStubTree(inputData.getFile(), inputData.getContent(), inputData.getProject());
+        data = builder.buildStubTree(inputData);
       }
-      else if (!fileType.isBinary()) {
+      if (data == null && !fileType.isBinary()) {
         final LanguageFileType languageFileType = (LanguageFileType)fileType;
         Language l = languageFileType.getLanguage();
         final IFileElementType type = LanguageParserDefinitions.INSTANCE.forLanguage(l).getFileNodeType();
 
         PsiFile psi = inputData.getPsiFile();
+        psi = psi.getViewProvider().getStubBindingRoot();
         CharSequence contentAsText = inputData.getContentAsText();
         psi.putUserData(IndexingDataKeys.FILE_TEXT_CONTENT_KEY, contentAsText);
 

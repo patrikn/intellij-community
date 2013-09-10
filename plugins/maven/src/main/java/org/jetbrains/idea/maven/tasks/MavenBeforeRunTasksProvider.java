@@ -35,7 +35,7 @@ import com.intellij.util.execution.ParametersListUtil;
 import icons.MavenIcons;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.idea.maven.execution.MavenExecuteGoalDialog;
+import org.jetbrains.idea.maven.execution.MavenEditGoalDialog;
 import org.jetbrains.idea.maven.execution.MavenRunner;
 import org.jetbrains.idea.maven.execution.MavenRunnerParameters;
 import org.jetbrains.idea.maven.project.MavenProject;
@@ -106,7 +106,7 @@ public class MavenBeforeRunTasksProvider extends BeforeRunTaskProvider<MavenBefo
   }
 
   public boolean configureTask(RunConfiguration runConfiguration, MavenBeforeRunTask task) {
-    MavenExecuteGoalDialog dialog = new MavenExecuteGoalDialog(myProject);
+    MavenEditGoalDialog dialog = new MavenEditGoalDialog(myProject);
 
     dialog.setTitle(TasksBundle.message("maven.tasks.select.goal.title"));
 
@@ -135,8 +135,7 @@ public class MavenBeforeRunTasksProvider extends BeforeRunTaskProvider<MavenBefo
     dialog.show();
     if (!dialog.isOK()) return false;
 
-    MavenProject newMavenProject = dialog.getSelectedMavenProject();
-    task.setProjectPath(newMavenProject == null ? null : newMavenProject.getPath());
+    task.setProjectPath(dialog.getWorkDirectory() + "/pom.xml");
     task.setGoal(dialog.getGoals());
     return true;
   }

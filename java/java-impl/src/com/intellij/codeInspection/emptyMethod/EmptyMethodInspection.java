@@ -15,7 +15,7 @@
  */
 package com.intellij.codeInspection.emptyMethod;
 
-import com.intellij.ExtensionPoints;
+import com.intellij.ToolExtensionPoints;
 import com.intellij.analysis.AnalysisScope;
 import com.intellij.codeInsight.AnnotationUtil;
 import com.intellij.codeInsight.daemon.GroupNames;
@@ -23,6 +23,7 @@ import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.reference.*;
 import com.intellij.codeInspection.util.SpecialAnnotationsUtil;
+import com.intellij.codeInspection.util.SpecialAnnotationsUtilBase;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.Extensions;
@@ -50,7 +51,7 @@ import java.util.List;
 /**
  * @author max
  */
-public class EmptyMethodInspection extends GlobalJavaInspectionTool {
+public class EmptyMethodInspection extends GlobalJavaBatchInspectionTool {
   private static final String DISPLAY_NAME = InspectionsBundle.message("inspection.empty.method.display.name");
   @NonNls private static final String SHORT_NAME = "EmptyMethod";
 
@@ -62,11 +63,11 @@ public class EmptyMethodInspection extends GlobalJavaInspectionTool {
 
   @Override
   @Nullable
-  public CommonProblemDescriptor[] checkElement(RefEntity refEntity,
-                                                AnalysisScope scope,
-                                                InspectionManager manager,
-                                                GlobalInspectionContext globalContext,
-                                                ProblemDescriptionsProcessor processor) {
+  public CommonProblemDescriptor[] checkElement(@NotNull RefEntity refEntity,
+                                                @NotNull AnalysisScope scope,
+                                                @NotNull InspectionManager manager,
+                                                @NotNull GlobalInspectionContext globalContext,
+                                                @NotNull ProblemDescriptionsProcessor processor) {
     if (!(refEntity instanceof RefMethod)) {
       return null;
     }
@@ -134,10 +135,10 @@ public class EmptyMethodInspection extends GlobalJavaInspectionTool {
     if (message != null) {
       final ArrayList<LocalQuickFix> fixes = new ArrayList<LocalQuickFix>();
       fixes.add(getFix(processor, needToDeleteHierarchy));
-      SpecialAnnotationsUtil.createAddToSpecialAnnotationFixes(refMethod.getElement(), new Processor<String>() {
+      SpecialAnnotationsUtilBase.createAddToSpecialAnnotationFixes(refMethod.getElement(), new Processor<String>() {
         @Override
         public boolean process(final String qualifiedName) {
-          fixes.add(SpecialAnnotationsUtil.createAddToSpecialAnnotationsListQuickFix(
+          fixes.add(SpecialAnnotationsUtilBase.createAddToSpecialAnnotationsListQuickFix(
             QuickFixBundle.message("fix.add.special.annotation.text", qualifiedName),
             QuickFixBundle.message("fix.add.special.annotation.family"),
             EXCLUDE_ANNOS, qualifiedName, refMethod.getElement()));
@@ -165,7 +166,7 @@ public class EmptyMethodInspection extends GlobalJavaInspectionTool {
     if (AnnotationUtil.isAnnotated(owner, EXCLUDE_ANNOS)) {
       return false;
     }
-    for (final Object extension : Extensions.getExtensions(ExtensionPoints.EMPTY_METHOD_TOOL)) {
+    for (final Object extension : Extensions.getExtensions(ToolExtensionPoints.EMPTY_METHOD_TOOL)) {
       if (((Condition<RefMethod>) extension).value(refMethod)) {
         return false;
       }
@@ -201,8 +202,9 @@ public class EmptyMethodInspection extends GlobalJavaInspectionTool {
   }
 
   @Override
-  protected boolean queryExternalUsagesRequests(final RefManager manager, final GlobalJavaInspectionContext context,
-                                                final ProblemDescriptionsProcessor descriptionsProcessor) {
+  protected boolean queryExternalUsagesRequests(@NotNull final RefManager manager,
+                                                @NotNull final GlobalJavaInspectionContext context,
+                                                @NotNull final ProblemDescriptionsProcessor descriptionsProcessor) {
      manager.iterate(new RefJavaVisitor() {
       @Override public void visitElement(@NotNull RefEntity refEntity) {
         if (refEntity instanceof RefElement && descriptionsProcessor.getDescriptions(refEntity) != null) {
@@ -265,7 +267,7 @@ public class EmptyMethodInspection extends GlobalJavaInspectionTool {
   }
 
   @Override
-  public String getHint(final QuickFix fix) {
+  public String getHint(@NotNull final QuickFix fix) {
     final List<Boolean> list = myQuickFixes.getKeysByValue(fix);
     if (list != null) {
       LOG.assertTrue(list.size() == 1);
@@ -356,7 +358,7 @@ public class EmptyMethodInspection extends GlobalJavaInspectionTool {
     }
 
     @Override
-    public void applyFix(final @NotNull Project project, @NotNull ProblemDescriptor descriptor) {
+    public void applyFix(@NotNull final Project project, @NotNull ProblemDescriptor descriptor) {
        applyFix(project, new ProblemDescriptor[]{descriptor}, new ArrayList<PsiElement>(), null);
     }
 

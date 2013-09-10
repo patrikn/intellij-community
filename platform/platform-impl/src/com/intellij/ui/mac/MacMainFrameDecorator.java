@@ -19,7 +19,10 @@ import com.apple.eawt.*;
 import com.intellij.Patches;
 import com.intellij.ide.ui.UISettings;
 import com.intellij.ide.ui.UISettingsListener;
+import com.intellij.openapi.application.ex.ApplicationInfoEx;
+import com.intellij.openapi.application.impl.ApplicationInfoImpl;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.util.BuildNumber;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.wm.impl.IdeFrameDecorator;
 import com.intellij.openapi.wm.impl.IdeFrameImpl;
@@ -36,6 +39,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.intellij.ui.mac.foundation.Foundation.invoke;
@@ -82,9 +87,13 @@ public class MacMainFrameDecorator extends IdeFrameDecorator implements UISettin
 
   public static final String FULL_SCREEN = "Idea.Is.In.FullScreen.Mode.Now";
   private static boolean HAS_FULLSCREEN_UTILITIES;
+
+  private static Method requestToggleFullScreenMethod;
+
   static {
     try {
       Class.forName("com.apple.eawt.FullScreenUtilities");
+      requestToggleFullScreenMethod = Application.class.getMethod("requestToggleFullScreen", Window.class);
       HAS_FULLSCREEN_UTILITIES = true;
     } catch (Exception e) {
       HAS_FULLSCREEN_UTILITIES = false;
@@ -160,9 +169,9 @@ public class MacMainFrameDecorator extends IdeFrameDecorator implements UISettin
 
     final ID pool = invoke("NSAutoreleasePool", "new");
 
-    if (ORACLE_BUG_ID_8003173) {
-      replaceNativeFullscreenListenerCallback();
-    }
+    //if (ORACLE_BUG_ID_8003173) {
+    //  replaceNativeFullscreenListenerCallback();
+    //}
 
     int v = UNIQUE_COUNTER.incrementAndGet();
     if (Patches.APPLE_BUG_ID_10514018) {
@@ -186,7 +195,7 @@ public class MacMainFrameDecorator extends IdeFrameDecorator implements UISettin
           @Override
           public void windowEnteredFullScreen(AppEvent.FullScreenEvent event) {
             // We can get the notification when the frame has been disposed
-            if (myFrame == null || ORACLE_BUG_ID_8003173) return;
+            if (myFrame == null/*|| ORACLE_BUG_ID_8003173*/) return;
             enterFullscreen();
             myFrame.validate();
           }
@@ -194,7 +203,7 @@ public class MacMainFrameDecorator extends IdeFrameDecorator implements UISettin
           @Override
           public void windowExitedFullScreen(AppEvent.FullScreenEvent event) {
             // We can get the notification when the frame has been disposed
-            if (myFrame == null || ORACLE_BUG_ID_8003173) return;
+            if (myFrame == null/* || ORACLE_BUG_ID_8003173*/) return;
             exitFullscreen();
             myFrame.validate();
           }
@@ -234,8 +243,12 @@ public class MacMainFrameDecorator extends IdeFrameDecorator implements UISettin
       // install uri handler
       final ID mainBundle = invoke("NSBundle", "mainBundle");
       final ID urlTypes = invoke(mainBundle, "objectForInfoDictionaryKey:", Foundation.nsString("CFBundleURLTypes"));
-      if (urlTypes.equals(ID.NIL)) {
-        LOG.warn("no url bundle present");
+      final ApplicationInfoEx info = ApplicationInfoImpl.getShadowInstance();
+      final BuildNumber build = info != null ? info.getBuild() : null;
+      if (urlTypes.equals(ID.NIL) && build != null && !build.isSnapshot()) {
+        LOG.warn("no url bundle present. \n" +
+                 "To use platform protocol handler to open external links specify required protocols in the mac app layout section of the build file\n" +
+                 "Example: args.urlSchemes = [\"your-protocol\"] will handle following links: your-protocol://open?file=file&line=line");
         return;
       }
       ourProtocolHandler = new CustomProtocolHandler();
@@ -281,7 +294,17 @@ public class MacMainFrameDecorator extends IdeFrameDecorator implements UISettin
   @Override
   public void toggleFullScreen(boolean state) {
     if (!SystemInfo.isMacOSLion || myFrame == null) return;
-    if (myInFullScreen != state) {
+    if (SystemInfo.isJavaVersionAtLeast("1.7")) {
+      try {
+        requestToggleFullScreenMethod.invoke(Application.getApplication(),myFrame);
+      }
+      catch (IllegalAccessException e) {
+        LOG.error(e);
+      }
+      catch (InvocationTargetException e) {
+        LOG.error(e);
+      }
+    } else if (myInFullScreen != state) {
       final ID window = MacUtil.findWindowForTitle(myFrame.getTitle());
       if (window == null) return;
       Foundation.executeOnMainThread(new Runnable() {

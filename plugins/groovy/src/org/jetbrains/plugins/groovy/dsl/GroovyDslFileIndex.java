@@ -46,6 +46,7 @@ import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.reference.SoftReference;
+import com.intellij.util.ConcurrencyUtil;
 import com.intellij.util.ExceptionUtil;
 import com.intellij.util.PathUtil;
 import com.intellij.util.concurrency.Semaphore;
@@ -58,6 +59,7 @@ import com.intellij.util.io.KeyDescriptor;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.plugins.groovy.GroovyFileType;
 import org.jetbrains.plugins.groovy.annotator.GroovyFrameworkConfigNotification;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFile;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.blocks.GrClosableBlock;
@@ -72,7 +74,6 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -92,22 +93,15 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
   public static final NotificationGroup NOTIFICATION_GROUP =
     new NotificationGroup("Groovy DSL errors", NotificationDisplayType.BALLOON, true);
   private final MyDataIndexer myDataIndexer = new MyDataIndexer();
-  private final MyInputFilter myInputFilter = new MyInputFilter();
 
   private static final MultiMap<String, LinkedBlockingQueue<Pair<VirtualFile, GroovyDslExecutor>>> filesInProcessing =
     new ConcurrentMultiMap<String, LinkedBlockingQueue<Pair<VirtualFile, GroovyDslExecutor>>>();
 
-  private static final ThreadPoolExecutor ourPool = new ThreadPoolExecutor(0, 1, 10, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), new ThreadFactory() {
-    @NotNull
-    @Override
-    public Thread newThread(@NotNull Runnable r) {
-      return new Thread(r, "Groovy DSL File Index Executor");
-    }
-  });
+  private static final ThreadPoolExecutor ourPool = new ThreadPoolExecutor(0, 1, 10, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), ConcurrencyUtil.newNamedThreadFactory("Groovy DSL File Index Executor"));
 
   private final EnumeratorStringDescriptor myKeyDescriptor = new EnumeratorStringDescriptor();
   private static final byte[] ENABLED_FLAG = new byte[]{(byte)239};
-  
+
   static {
     NotificationsConfigurationImpl.remove("Groovy DSL parsing");
   }
@@ -144,7 +138,7 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
 
   @Override
   public FileBasedIndex.InputFilter getInputFilter() {
-    return myInputFilter;
+    return new MyInputFilter();
   }
 
   @Override
@@ -157,7 +151,7 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
     return 0;
   }
 
-  @Nullable 
+  @Nullable
   public static String getInactivityReason(VirtualFile file) {
     try {
       final byte[] bytes = ENABLED.readAttributeBytes(file);
@@ -168,7 +162,7 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
       if (bytes[0] != 42) {
         return null;
       }
-      
+
       return new String(bytes, 1, bytes.length - 1);
     }
     catch (IOException e) {
@@ -440,7 +434,7 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
       @Override
       public Result<List<GroovyDslScript>> compute() {
         if (stopGdsl) {
-          return Result.create(Collections.<GroovyDslScript>emptyList());
+          return Result.create(Collections.<GroovyDslScript>emptyList(), Collections.emptyList());
         }
 
         int count = 0;
@@ -449,7 +443,7 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
 
         List<Pair<File, GroovyDslExecutor>> standardScripts = getStandardScripts();
         if (stopGdsl) {
-          return Result.create(Collections.<GroovyDslScript>emptyList());
+          return Result.create(Collections.<GroovyDslScript>emptyList(), Collections.emptyList());
         }
         assert standardScripts != null;
         for (Pair<File, GroovyDslExecutor> pair : standardScripts) {
@@ -511,7 +505,11 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
     }
   }
 
-  private static class MyInputFilter implements FileBasedIndex.InputFilter {
+  private static class MyInputFilter extends DefaultFileTypeSpecificInputFilter {
+    MyInputFilter() {
+      super(GroovyFileType.GROOVY_FILE_TYPE);
+    }
+
     @Override
     public boolean acceptInput(final VirtualFile file) {
       return "gdsl".equals(file.getExtension());

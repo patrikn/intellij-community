@@ -16,7 +16,10 @@
 
 package com.intellij.ide.structureView.newStructureView;
 
-import com.intellij.ide.*;
+import com.intellij.ide.CommonActionsManager;
+import com.intellij.ide.CopyPasteDelegator;
+import com.intellij.ide.DataManager;
+import com.intellij.ide.PsiCopyPasteManager;
 import com.intellij.ide.structureView.*;
 import com.intellij.ide.structureView.impl.StructureViewFactoryImpl;
 import com.intellij.ide.structureView.impl.StructureViewState;
@@ -35,6 +38,8 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.fileEditor.FileEditorManager;
+import com.intellij.openapi.fileEditor.OpenFileDescriptor;
+import com.intellij.openapi.fileEditor.TextEditor;
 import com.intellij.openapi.project.IndexNotReadyException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.SimpleToolWindowPanel;
@@ -44,7 +49,7 @@ import com.intellij.pom.Navigatable;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.impl.source.tree.CompositeElement;
-import com.intellij.psi.util.PsiUtilBase;
+import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.ui.*;
 import com.intellij.ui.treeStructure.Tree;
 import com.intellij.ui.treeStructure.actions.CollapseAllAction;
@@ -223,7 +228,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
         psiElements.add((PsiElement)selectedElement);
       }
     }
-    return PsiUtilBase.toPsiElementArray(psiElements);
+    return PsiUtilCore.toPsiElementArray(psiElements);
   }
 
   private Object[] getSelectedElements() {
@@ -760,6 +765,9 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
     if (PlatformDataKeys.FILE_EDITOR.is(dataId)) {
       return myFileEditor;
     }
+    if (OpenFileDescriptor.NAVIGATE_IN_EDITOR.is(dataId) && myFileEditor instanceof TextEditor) {
+      return ((TextEditor)myFileEditor).getEditor();
+    }
     if (PlatformDataKeys.CUT_PROVIDER.is(dataId)) {
       return myCopyPasteDelegator.getCutProvider();
     }
@@ -794,7 +802,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
         psiElements.add((PsiElement)selectedElement);
       }
     }
-    return PsiUtilBase.toPsiElementArray(psiElements);
+    return PsiUtilCore.toPsiElementArray(psiElements);
   }
 
   @Nullable

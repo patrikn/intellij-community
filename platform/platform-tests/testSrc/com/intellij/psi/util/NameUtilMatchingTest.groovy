@@ -25,6 +25,7 @@ import com.intellij.ui.SpeedSearchComparator
 import com.intellij.util.ThrowableRunnable
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.text.Matcher
+import junit.framework.AssertionFailedError
 import org.jetbrains.annotations.NonNls
 /**
  * @author max
@@ -277,6 +278,8 @@ public class NameUtilMatchingTest extends UsefulTestCase {
   }
 
   public void testMiddleMatching() {
+    assertMatches("*zz*", "ListConfigzzKey");
+    assertMatches("*zz", "ListConfigzzKey");
     assertTrue(caseInsensitiveMatcher("*old").matches("folder"));
     assertMatches("SWU*H*7", "SWUpgradeHdlrFSPR7Test");
     assertMatches("SWU*H*R", "SWUpgradeHdlrFSPR7Test");
@@ -286,7 +289,7 @@ public class NameUtilMatchingTest extends UsefulTestCase {
     assertDoesntMatch("*get*A", "getClass");
     assertMatches("*git", "BlaGitBla");
     assertMatches("*Git", "BlaGitBla");
-    assertFalse(firstLetterMatcher("*Git").matches("BlagitBla"));
+    assertTrue(firstLetterMatcher("*Git").matches("BlagitBla"));
     assertMatches("*git", "BlagitBla");
     assertMatches("*Git*", "AtpGenerationItem");
     assertMatches("Collec*Util*", "CollectionUtils");
@@ -301,15 +304,27 @@ public class NameUtilMatchingTest extends UsefulTestCase {
     assertMatches("*BComp", "BaseComponent");
   }
 
+  public void "test uppercase prefix with middle matching"() {
+    assertMatches("*OS", "ios");
+    assertMatches("*OS", "IOS");
+    assertMatches("*OS", "osx");
+    assertMatches("*OS", "OSX");
+
+    assertTrue(firstLetterMatcher("*I").matches("ID"));
+    assertFalse(firstLetterMatcher("*I").matches("id"));
+  }
+
   public void testMiddleMatchingFirstLetterSensitive() {
     assertTrue(firstLetterMatcher(" cl").matches("getClass"));
-    assertTrue(firstLetterMatcher(" EUC-").matches("x-EUC-TW"));
+    assertFalse(firstLetterMatcher(" EUC-").matches("x-EUC-TW"));
     assertTrue(firstLetterMatcher(" a").matches("aaa"));
     assertFalse(firstLetterMatcher(" a").matches("Aaa"));
     assertFalse(firstLetterMatcher(" a").matches("Aaa"));
     assertFalse(firstLetterMatcher(" _bl").matches("_top"));
     assertFalse(firstLetterMatcher("*Ch").matches("char"));
-    assertTrue(firstLetterMatcher("*codes").matches("CFLocaleCopyISOCountryCodes"));
+    assertTrue(firstLetterMatcher("*Codes").matches("CFLocaleCopyISOCountryCodes"));
+    assertFalse(firstLetterMatcher("*codes").matches("CFLocaleCopyISOCountryCodes"));
+    assertTrue(firstLetterMatcher("*codes").matches("getCFLocaleCopyISOCountryCodes"));
     assertTrue(firstLetterMatcher("*Bcomp").matches("BaseComponent"));
   }
 
@@ -379,6 +394,10 @@ public class NameUtilMatchingTest extends UsefulTestCase {
     assertDoesntMatch("Foo ", "Foox");
     assertDoesntMatch("Collections ", "CollectionSplitter");
     assertMatches("CollectionS ", "CollectionSplitter");
+
+    assertDoesntMatch("*l ", "AppDelegate");
+    assertDoesntMatch("*le ", "AppDelegate");
+    assertDoesntMatch("*leg ", "AppDelegate");
   }
 
   public void testDigits() {
@@ -455,7 +474,7 @@ public class NameUtilMatchingTest extends UsefulTestCase {
                         TextRange.from(0, 4), TextRange.from(10, 1));
   }
 
-  public void "test plus/minus in the pattern should allow to be space-surrounded"() {
+  public void "test plus or minus in the pattern should allow to be space-surrounded"() {
     assertMatches("a+b", "alpha+beta")
     assertMatches("a+b", "alpha_gamma+beta")
     assertMatches("a+b", "alpha + beta")
@@ -493,6 +512,10 @@ public class NameUtilMatchingTest extends UsefulTestCase {
     assertPreference("*psfi", "PsiJavaFileBaseImpl", "PsiFileImpl", NameUtil.MatchingCaseSensitivity.NONE);
   }
 
+  public void "test prefer matches to the end"() {
+    assertPreference("*e", "fileIndex", "file", NameUtil.MatchingCaseSensitivity.NONE);
+  }
+
   public void testPreferences() {
     assertPreference(" fb", "FooBar", "_fooBar", NameUtil.MatchingCaseSensitivity.NONE);
     assertPreference("*foo", "barFoo", "foobar");
@@ -500,7 +523,7 @@ public class NameUtilMatchingTest extends UsefulTestCase {
     assertPreference("*fo", "barfoo", "foo");
     assertPreference("*fo", "asdfo", "Foo", NameUtil.MatchingCaseSensitivity.NONE);
     assertPreference(" sto", "StackOverflowError", "ArrayStoreException", NameUtil.MatchingCaseSensitivity.NONE);
-    assertNoPreference(" EUC-", "x-EUC-TW", "EUC-JP", NameUtil.MatchingCaseSensitivity.FIRST_LETTER);
+    assertPreference(" EUC-", "x-EUC-TW", "EUC-JP", NameUtil.MatchingCaseSensitivity.FIRST_LETTER);
     assertPreference(" boo", "Boolean", "boolean", NameUtil.MatchingCaseSensitivity.NONE);
     assertPreference(" Boo", "boolean", "Boolean", NameUtil.MatchingCaseSensitivity.NONE);
     assertPreference("ob", "oci_bind_array_by_name", "obj");
@@ -537,7 +560,7 @@ public class NameUtilMatchingTest extends UsefulTestCase {
   }
 
   public void testMeaningfulMatchingDegree() {
-    assertTrue(new MinusculeMatcher(" EUC-", NameUtil.MatchingCaseSensitivity.FIRST_LETTER).matchingDegree("x-EUC-TW") > Integer.MIN_VALUE);
+    assertTrue(caseInsensitiveMatcher(" EUC-").matchingDegree("x-EUC-TW") > Integer.MIN_VALUE);
   }
 
   private static void assertPreference(@NonNls String pattern,
@@ -581,9 +604,12 @@ public class NameUtilMatchingTest extends UsefulTestCase {
     assertDoesntMatch("URLCl", "UrlClassLoader");
   }
 
-  public void "test a capital after another capital may match a lowercase letter because shift was accidentally help too long"() {
+  public void "test a capital after another capital may match a lowercase letter because shift was accidentally held too long"() {
     assertMatches("USerDefa", "UserDefaults")
     assertMatches("NSUSerDefa", "NSUserDefaults")
+    assertMatches("NSUSER", "NSUserDefaults")
+    assertMatches("NSUSD", "NSUserDefaults")
+    assertMatches("NSUserDEF", "NSUserDefaults")
   }
 
   public void testPerformance() {
@@ -600,22 +626,31 @@ public class NameUtilMatchingTest extends UsefulTestCase {
     }
 
     System.out.println("measuring start: " + System.currentTimeMillis());
-    PlatformTestUtil.startPerformanceTest("Matcher is slow", 4500, new ThrowableRunnable() {
-      @Override
-      public void run() {
-        System.out.println("attempt start: " + System.currentTimeMillis());
-        for (int i = 0; i < 100000; i++) {
-          for (MinusculeMatcher matcher : matching) {
-            assertTrue(matcher.toString(), matcher.matches(longName));
-            matcher.matchingDegree(longName);
+    try {
+      PlatformTestUtil.startPerformanceTest("Matcher is slow", 4500, new ThrowableRunnable() {
+        @Override
+        public void run() {
+          System.out.println("attempt start: " + System.currentTimeMillis());
+          for (int i = 0; i < 100000; i++) {
+            for (MinusculeMatcher matcher : matching) {
+              assertTrue(matcher.toString(), matcher.matches(longName));
+              matcher.matchingDegree(longName);
+            }
+            for (MinusculeMatcher matcher : nonMatching) {
+              assertFalse(matcher.toString(), matcher.matches(longName));
+            }
           }
-          for (MinusculeMatcher matcher : nonMatching) {
-            assertFalse(matcher.toString(), matcher.matches(longName));
-          }
+          System.out.println("attempt end: " + System.currentTimeMillis());
         }
-        System.out.println("attempt end: " + System.currentTimeMillis());
-      }
-    }).cpuBound().assertTiming();
+      }).cpuBound().assertTiming()
+    }
+    catch (AssertionFailedError e) {
+      println "free " + Runtime.runtime.freeMemory()
+      println "total " + Runtime.runtime.totalMemory()
+      println "max " + Runtime.runtime.maxMemory()
+      printThreadDump();
+      throw e
+    }
   }
 
   public void testOnlyUnderscoresPerformance() {

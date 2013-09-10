@@ -41,12 +41,12 @@ import java.util.Collection;
 import java.util.Set;
 
 /**
- * refactored from {@link com.intellij.codeInspection.varScopeCanBeNarrowed.FieldCanBeLocalInspection.MyQuickFix}
+ * refactored from {@link com.intellij.codeInspection.varScopeCanBeNarrowed.FieldCanBeLocalInspection}
  *
  * @author Danila Ponomarenko
  */
 public abstract class BaseConvertToLocalQuickFix<V extends PsiVariable> implements LocalQuickFix {
-  private static final Logger LOG = Logger.getInstance(BaseConvertToLocalQuickFix.class);
+  protected static final Logger LOG = Logger.getInstance(BaseConvertToLocalQuickFix.class);
 
   @Override
   @NotNull
@@ -57,8 +57,8 @@ public abstract class BaseConvertToLocalQuickFix<V extends PsiVariable> implemen
   @Override
   public final void applyFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor) {
     final V variable = getVariable(descriptor);
-    final PsiFile myFile = variable.getContainingFile();
     if (variable == null || !variable.isValid()) return; //weird. should not get here when field becomes invalid
+    final PsiFile myFile = variable.getContainingFile();
 
     try {
       final PsiElement newDeclaration = moveDeclaration(project, variable);
@@ -89,10 +89,14 @@ public abstract class BaseConvertToLocalQuickFix<V extends PsiVariable> implemen
   }
 
   @Nullable
-  private PsiElement moveDeclaration(@NotNull Project project, @NotNull V variable) {
+  protected PsiElement moveDeclaration(@NotNull Project project, @NotNull V variable) {
     final Collection<PsiReference> references = ReferencesSearch.search(variable).findAll();
     if (references.isEmpty()) return null;
 
+    return moveDeclaration(project, variable, references, true);
+  }
+
+  protected PsiElement moveDeclaration(Project project, V variable, final Collection<PsiReference> references, boolean delete) {
     final PsiCodeBlock anchorBlock = findAnchorBlock(references);
     if (anchorBlock == null) return null; //was assert, but need to fix the case when obsolete inspection highlighting is left
     if (!CodeInsightUtil.preparePsiElementsForWrite(anchorBlock)) return null;
@@ -113,6 +117,7 @@ public abstract class BaseConvertToLocalQuickFix<V extends PsiVariable> implemen
         anchorAssignmentExpression.getRExpression(),
         variable,
         refsSet,
+        delete,
         new NotNullFunction<PsiDeclarationStatement, PsiElement>() {
           @NotNull
           @Override
@@ -132,6 +137,7 @@ public abstract class BaseConvertToLocalQuickFix<V extends PsiVariable> implemen
       variable.getInitializer(),
       variable,
       references,
+      delete,
       new NotNullFunction<PsiDeclarationStatement, PsiElement>() {
         @NotNull
         @Override
@@ -142,12 +148,12 @@ public abstract class BaseConvertToLocalQuickFix<V extends PsiVariable> implemen
     );
   }
 
-  protected PsiElement applyChanges(final @NotNull Project project,
-                                    final @NotNull String localName,
-                                    final @Nullable PsiExpression initializer,
-                                    final @NotNull V variable,
-                                    final @NotNull Collection<PsiReference> references,
-                                    final @NotNull NotNullFunction<PsiDeclarationStatement, PsiElement> action) {
+  protected PsiElement applyChanges(@NotNull final Project project,
+                                    @NotNull final String localName,
+                                    @Nullable final PsiExpression initializer,
+                                    @NotNull final V variable,
+                                    @NotNull final Collection<PsiReference> references,
+                                    final boolean delete, @NotNull final NotNullFunction<PsiDeclarationStatement, PsiElement> action) {
     final PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(project);
 
     return ApplicationManager.getApplication().runWriteAction(
@@ -155,9 +161,11 @@ public abstract class BaseConvertToLocalQuickFix<V extends PsiVariable> implemen
         @Override
         public PsiElement compute() {
           final PsiElement newDeclaration = moveDeclaration(elementFactory, localName, variable, initializer, action, references);
-          beforeDelete(project, variable, newDeclaration);
-          variable.normalizeDeclaration();
-          variable.delete();
+          if (delete) {
+            beforeDelete(project, variable, newDeclaration);
+            variable.normalizeDeclaration();
+            variable.delete();
+          }
           return newDeclaration;
         }
       }
@@ -202,11 +210,7 @@ public abstract class BaseConvertToLocalQuickFix<V extends PsiVariable> implemen
 
     final PsiReferenceExpression leftExpression = (PsiReferenceExpression)expression.getLExpression();
 
-    if (!leftExpression.isReferenceTo(variable)) {
-      return false;
-    }
-
-    return true;
+    return leftExpression.isReferenceTo(variable);
   }
 
   @NotNull
@@ -272,10 +276,5 @@ public abstract class BaseConvertToLocalQuickFix<V extends PsiVariable> implemen
       }
     }
     return result;
-  }
-
-
-  public boolean runForWholeFile() {
-    return true;
   }
 }

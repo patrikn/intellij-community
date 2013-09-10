@@ -51,7 +51,7 @@ public class ExtensionsAreaImpl implements ExtensionsArea {
   private final AreaPicoContainerImpl myPicoContainer;
   private final Throwable myCreationTrace;
   private final Map<String,ExtensionPointImpl> myExtensionPoints = new ConcurrentHashMap<String, ExtensionPointImpl>();
-  private final Map<String,Throwable> myEPTraces = new HashMap<String, Throwable>();
+  private final Map<String,Throwable> myEPTraces = DEBUG_REGISTRATION ? new HashMap<String, Throwable>():null;
   private final MultiMap<String, ExtensionPointAvailabilityListener> myAvailabilityListeners = new MultiMap<String, ExtensionPointAvailabilityListener>();
   private final List<Runnable> mySuspendedListenerActions = new ArrayList<Runnable>();
   private boolean myAvailabilityNotificationsActive = true;
@@ -169,7 +169,7 @@ public class ExtensionsAreaImpl implements ExtensionsArea {
     // has content
     if (!extensionElement.getContent().isEmpty()) return true;
     // has custom attributes
-    for (Attribute attribute : (List<Attribute>)extensionElement.getAttributes()) {
+    for (Attribute attribute : extensionElement.getAttributes()) {
       final String name = attribute.getName();
       if (!"implementation".equals(name) && !"id".equals(name) && !"order".equals(name)) {
         return true;
@@ -405,6 +405,7 @@ public class ExtensionsAreaImpl implements ExtensionsArea {
     return extensionPoint;
   }
 
+  @NotNull
   @Override
   @SuppressWarnings({"unchecked"})
   public <T> ExtensionPoint<T> getExtensionPoint(@NotNull ExtensionPointName<T> extensionPointName) {

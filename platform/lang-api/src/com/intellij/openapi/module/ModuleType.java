@@ -19,6 +19,7 @@ import com.intellij.ide.util.projectWizard.ModuleBuilder;
 import com.intellij.ide.util.projectWizard.ModuleWizardStep;
 import com.intellij.ide.util.projectWizard.SettingsStep;
 import com.intellij.ide.util.projectWizard.WizardContext;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.roots.ui.configuration.ModulesProvider;
 import org.jetbrains.annotations.NonNls;
@@ -30,15 +31,19 @@ import javax.swing.*;
 public abstract class ModuleType<T extends ModuleBuilder> {
   public static final ModuleType EMPTY;
 
+  @NotNull
   private final String myId;
 
-  protected ModuleType(@NonNls String id) {
+  protected ModuleType(@NotNull @NonNls String id) {
     myId = id;
   }
 
+  @NotNull
   public abstract T createModuleBuilder();
 
+  @NotNull
   public abstract String getName();
+  @NotNull
   public abstract String getDescription();
   public abstract Icon getBigIcon();
 
@@ -48,16 +53,17 @@ public abstract class ModuleType<T extends ModuleBuilder> {
 
   public abstract Icon getNodeIcon(@Deprecated boolean isOpened);
 
-
-  public ModuleWizardStep[] createWizardSteps(WizardContext wizardContext, T moduleBuilder, ModulesProvider modulesProvider) {
+  @NotNull
+  public ModuleWizardStep[] createWizardSteps(@NotNull WizardContext wizardContext, @NotNull T moduleBuilder, @NotNull ModulesProvider modulesProvider) {
     return ModuleWizardStep.EMPTY_ARRAY;
   }
 
   @Nullable
-  public ModuleWizardStep modifySettingsStep(SettingsStep settingsStep, ModuleBuilder moduleBuilder) {
+  public ModuleWizardStep modifySettingsStep(@NotNull SettingsStep settingsStep, @NotNull ModuleBuilder moduleBuilder) {
     return null;
   }
 
+  @NotNull
   public final String getId() {
     return myId;
   }
@@ -68,13 +74,11 @@ public abstract class ModuleType<T extends ModuleBuilder> {
 
     final ModuleType moduleType = (ModuleType)o;
 
-    if (myId != null ? !myId.equals(moduleType.myId) : moduleType.myId != null) return false;
-
-    return true;
+    return myId.equals(moduleType.myId);
   }
 
   public final int hashCode() {
-    return myId != null ? myId.hashCode() : 0;
+    return myId.hashCode();
   }
 
   public String toString() {
@@ -85,6 +89,7 @@ public abstract class ModuleType<T extends ModuleBuilder> {
     EMPTY = instantiate("com.intellij.openapi.module.EmptyModuleType");
   }
 
+  @NotNull
   private static ModuleType instantiate(String className) {
     try {
       return (ModuleType)Class.forName(className).newInstance();
@@ -94,11 +99,12 @@ public abstract class ModuleType<T extends ModuleBuilder> {
     }
   }
 
-  public boolean isValidSdk(final Module module, @Nullable final Sdk projectSdk) {
+  public boolean isValidSdk(@NotNull Module module, @Nullable final Sdk projectSdk) {
     return true;
   }
 
   public static ModuleType get(@NotNull Module module) {
-    return ModuleTypeManager.getInstance().findByID(module.getOptionValue(Module.ELEMENT_TYPE));
+    ModuleTypeManager instance = ModuleTypeManager.getInstance();
+    return instance == null && ApplicationManager.getApplication().isUnitTestMode() ? EMPTY : instance.findByID(module.getOptionValue(Module.ELEMENT_TYPE));
   }
 }

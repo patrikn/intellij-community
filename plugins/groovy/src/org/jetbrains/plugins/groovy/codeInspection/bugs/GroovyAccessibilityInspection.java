@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,13 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiFormatUtil;
+import com.intellij.psi.util.PsiFormatUtilBase;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.GroovyBundle;
-import org.jetbrains.plugins.groovy.annotator.intentions.GrModifierFix;
 import org.jetbrains.plugins.groovy.codeInspection.BaseInspection;
 import org.jetbrains.plugins.groovy.codeInspection.BaseInspectionVisitor;
 import org.jetbrains.plugins.groovy.codeInspection.GroovyFix;
@@ -65,6 +65,7 @@ public class GroovyAccessibilityInspection extends BaseInspection {
            setter != null && PsiUtil.isAccessible(place, setter);
   }
 
+  @NotNull
   @Override
   protected BaseInspectionVisitor buildVisitor() {
     return new MyVisitor();
@@ -90,7 +91,7 @@ public class GroovyAccessibilityInspection extends BaseInspection {
   }
 
   @Override
-  protected GroovyFix[] buildFixes(PsiElement location) {
+  protected GroovyFix[] buildFixes(@NotNull PsiElement location) {
     if (!(location instanceof GrReferenceElement || location instanceof GrConstructorCall)) {
       location = location.getParent();
     }
@@ -117,6 +118,7 @@ public class GroovyAccessibilityInspection extends BaseInspection {
       Project project = refElement.getProject();
       JavaPsiFacade facade = JavaPsiFacade.getInstance(project);
       PsiModifierList modifierListCopy = facade.getElementFactory().createFieldFromText("int a;", null).getModifierList();
+      assert modifierListCopy != null;
       modifierListCopy.setModifierProperty(PsiModifier.STATIC, modifierList.hasModifierProperty(PsiModifier.STATIC));
       String minModifier = PsiModifier.PROTECTED;
       if (refElement.hasModifierProperty(PsiModifier.PROTECTED)) {
@@ -189,11 +191,11 @@ public class GroovyAccessibilityInspection extends BaseInspection {
 
         registerError(refElement,
                       PsiFormatUtil.formatMethod((PsiMethod)constructor, PsiSubstitutor.EMPTY,
-                                                 PsiFormatUtil.SHOW_NAME |
-                                                 PsiFormatUtil.SHOW_TYPE |
-                                                 PsiFormatUtil.TYPE_AFTER |
-                                                 PsiFormatUtil.SHOW_PARAMETERS,
-                                                 PsiFormatUtil.SHOW_TYPE
+                                                 PsiFormatUtilBase.SHOW_NAME |
+                                                 PsiFormatUtilBase.SHOW_TYPE |
+                                                 PsiFormatUtilBase.TYPE_AFTER |
+                                                 PsiFormatUtilBase.SHOW_PARAMETERS,
+                                                 PsiFormatUtilBase.SHOW_TYPE
                       ));
       }
     }

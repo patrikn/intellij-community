@@ -28,12 +28,7 @@ import java.util.*;
  * @author Dmitry Avdeev
  */
 public class MultiMap<K, V> implements Serializable {
-  public static final MultiMap EMPTY = new MultiMap() {
-    @Override
-    protected Map createMap() {
-      return Collections.emptyMap();
-    }
-  };
+  public static final MultiMap EMPTY = new EmptyMap();
   private static final long serialVersionUID = -2632269270151455493L;
 
   protected final Map<K, Collection<V>> myMap;
@@ -41,6 +36,11 @@ public class MultiMap<K, V> implements Serializable {
 
   public MultiMap() {
     myMap = createMap();
+  }
+
+  public MultiMap(MultiMap<? extends K, ? extends V> toCopy) {
+    this();
+    putAllValues(toCopy);
   }
 
   public MultiMap(int i, float v) {
@@ -268,5 +268,12 @@ public class MultiMap<K, V> implements Serializable {
   @Override
   public String toString() {
     return myMap.toString();
+  }
+
+  private static class EmptyMap extends MultiMap {
+    @Override
+    protected Map createMap() {
+      return Collections.emptyMap();
+    }
   }
 }

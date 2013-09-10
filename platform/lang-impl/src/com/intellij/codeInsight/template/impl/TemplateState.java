@@ -183,8 +183,7 @@ public class TemplateState implements Disposable {
   @Nullable
   public TextResult getVariableValue(@NotNull String variableName) {
     if (variableName.equals(TemplateImpl.SELECTION)) {
-      final String selection = (String)getProperties().get(ExpressionContext.SELECTION);
-      return new TextResult(selection == null ? "" : selection);
+      return new TextResult(StringUtil.notNullize(getSelectionBeforeTemplate()));
     }
     if (variableName.equals(TemplateImpl.END)) {
       return new TextResult("");
@@ -207,6 +206,11 @@ public class TemplateState implements Disposable {
   }
 
   @Nullable
+  private String getSelectionBeforeTemplate() {
+    return (String)getProperties().get(ExpressionContext.SELECTION);
+  }
+
+  @Nullable
   public TextRange getCurrentVariableRange() {
     int number = getCurrentSegmentNumber();
     if (number == -1) return null;
@@ -220,7 +224,7 @@ public class TemplateState implements Disposable {
 
     return new TextRange(mySegments.getSegmentStart(segment), mySegments.getSegmentEnd(segment));
   }
-  
+
   public int getSegmentsCount() {
     return mySegments.getSegmentsCount();
   }
@@ -486,7 +490,7 @@ public class TemplateState implements Disposable {
       myEditor.getSelectionModel().removeSelection();
       myEditor.getSelectionModel().setSelection(start, end);
     }
-    
+
     Expression expressionNode = getCurrentExpression();
     final List<TemplateExpressionLookupElement> lookupItems = getCurrentExpressionLookupItems();
     final PsiFile psiFile = getPsiFile();
@@ -838,7 +842,8 @@ public class TemplateState implements Disposable {
   }
 
   private void setFinalEditorState() {
-    int endSegmentNumber = myTemplate.getEndSegmentNumber();
+    int selectionSegment = myTemplate.getVariableSegmentNumber(TemplateImpl.SELECTION);
+    int endSegmentNumber = selectionSegment >= 0 && getSelectionBeforeTemplate() == null ? selectionSegment : myTemplate.getEndSegmentNumber();
     int offset = -1;
     if (endSegmentNumber >= 0) {
       offset = mySegments.getSegmentStart(endSegmentNumber);
@@ -1051,7 +1056,7 @@ public class TemplateState implements Disposable {
               }
               reformatStartOffset = Math.min(reformatStartOffset, whiteSpaceRange.getStartOffset());
               reformatEndOffset = Math.max(reformatEndOffset, whiteSpaceRange.getEndOffset());
-            } 
+            }
           }
           style.reformatText(file, reformatStartOffset, reformatEndOffset);
           PsiDocumentManager.getInstance(myProject).commitDocument(myDocument);

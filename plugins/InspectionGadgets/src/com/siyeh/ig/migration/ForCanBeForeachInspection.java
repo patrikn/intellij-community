@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2012 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2013 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import javax.swing.JComponent;
+import javax.swing.*;
 
 public class ForCanBeForeachInspection extends BaseInspection {
 
@@ -88,6 +88,13 @@ public class ForCanBeForeachInspection extends BaseInspection {
 
   private class ForCanBeForeachFix extends InspectionGadgetsFix {
 
+    @Override
+    @NotNull
+    public String getFamilyName() {
+      return getName();
+    }
+
+    @Override
     @NotNull
     public String getName() {
       return InspectionGadgetsBundle.message("foreach.replace.quickfix");
@@ -521,10 +528,11 @@ public class ForCanBeForeachInspection extends BaseInspection {
           return null;
         }
       }
-      final PsiArrayType arrayType = (PsiArrayType)arrayReference.getType();
-      if (arrayType == null) {
+      final PsiType type = arrayReference.getType();
+      if (!(type instanceof PsiArrayType)) {
         return null;
       }
+      final PsiArrayType arrayType = (PsiArrayType)type;
       final PsiType componentType = arrayType.getComponentType();
       final String typeText = componentType.getCanonicalText();
       final PsiElement target = arrayReference.resolve();
@@ -1066,8 +1074,7 @@ public class ForCanBeForeachInspection extends BaseInspection {
     if (initialValue == null) {
       return false;
     }
-    final Object constant =
-      ExpressionUtils.computeConstantExpression(initialValue);
+    final Object constant = ExpressionUtils.computeConstantExpression(initialValue);
     if (!(constant instanceof Integer)) {
       return false;
     }
@@ -1082,6 +1089,9 @@ public class ForCanBeForeachInspection extends BaseInspection {
     final PsiExpression condition = forStatement.getCondition();
     final PsiReferenceExpression arrayReference = getVariableReferenceFromCondition(condition, indexVariable, secondDeclaredElement);
     if (arrayReference == null) {
+      return false;
+    }
+    if (!(arrayReference.getType() instanceof PsiArrayType)) {
       return false;
     }
     final PsiElement element = arrayReference.resolve();

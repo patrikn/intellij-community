@@ -68,7 +68,7 @@ public abstract class SdkType implements SdkTypeId {
 
   @Override
   @Nullable
-  public String getVersionString(Sdk sdk) {
+  public String getVersionString(@NotNull Sdk sdk) {
     return getVersionString(sdk.getHomePath());
   }
 
@@ -79,7 +79,7 @@ public abstract class SdkType implements SdkTypeId {
 
   public abstract String suggestSdkName(String currentSdkName, String sdkHome);
 
-  public void setupSdkPaths(Sdk sdk) {}
+  public void setupSdkPaths(@NotNull Sdk sdk) {}
 
   public boolean setupSdkPaths(final Sdk sdk, final SdkModel sdkModel) {
     setupSdkPaths(sdk);
@@ -88,8 +88,6 @@ public abstract class SdkType implements SdkTypeId {
 
   /**
    * @return Configurable object for the sdk's additional data or null if not applicable
-   * @param sdkModel
-   * @param sdkModificator
    */
   @Nullable
   public abstract AdditionalDataConfigurable createAdditionalDataConfigurable(SdkModel sdkModel, SdkModificator sdkModificator);
@@ -101,15 +99,15 @@ public abstract class SdkType implements SdkTypeId {
 
   @Override
   @Nullable
-  public SdkAdditionalData loadAdditionalData(Sdk currentSdk, Element additional) {
+  public SdkAdditionalData loadAdditionalData(@NotNull Sdk currentSdk, Element additional) {
     return loadAdditionalData(additional);
   }
 
-
-  public SdkType(@NonNls String name) {
+  public SdkType(@NotNull @NonNls String name) {
     myName = name;
   }
 
+  @NotNull
   @Override
   public String getName() {
     return myName;
@@ -179,7 +177,7 @@ public abstract class SdkType implements SdkTypeId {
   }
 
   @Nullable
-  public String getDefaultDocumentationUrl(final @NotNull Sdk sdk) {
+  public String getDefaultDocumentationUrl(@NotNull final Sdk sdk) {
     return null;
   }
 
@@ -239,5 +237,9 @@ public abstract class SdkType implements SdkTypeId {
   public boolean sdkHasValidPath(@NotNull Sdk sdk) {
     VirtualFile homeDir = sdk.getHomeDirectory();
     return homeDir != null && homeDir.isValid();
+  }
+
+  public String sdkPath(VirtualFile homePath) {
+    return homePath.getPath();
   }
 }

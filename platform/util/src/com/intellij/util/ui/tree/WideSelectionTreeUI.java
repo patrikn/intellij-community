@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,8 +69,38 @@ public class WideSelectionTreeUI extends BasicTreeUI {
   }
 
   private final MouseListener mySelectionListener = new MouseAdapter() {
-    @Override
+    boolean handled = false;
     public void mousePressed(@NotNull final MouseEvent e) {
+      handled = false;
+      if (!isSelected(e)) {
+        handled = true;
+        handle(e);
+      }
+    }
+
+    @Override
+    public void mouseReleased(@NotNull final MouseEvent e) {
+      if (!handled) {
+        handle(e);
+      }
+    }
+
+    private boolean isSelected(MouseEvent e) {
+      final JTree tree = (JTree)e.getSource();
+      final int selected = tree.getClosestRowForLocation(e.getX(), e.getY());
+      final int[] rows = tree.getSelectionRows();
+      if (rows != null) {
+        for (int row : rows) {
+          if (row == selected) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    }
+
+    private void handle(MouseEvent e) {
       final JTree tree = (JTree)e.getSource();
       if (SwingUtilities.isLeftMouseButton(e) && !e.isPopupTrigger()) {
         // if we can't stop any ongoing editing, do nothing
@@ -323,13 +353,10 @@ public class WideSelectionTreeUI extends BasicTreeUI {
         }
       }
       else {
-        if (UIUtil.isUnderAquaBasedLookAndFeel() || UIUtil.isUnderDarcula()) {
+        if (selected && (UIUtil.isUnderAquaBasedLookAndFeel() || UIUtil.isUnderDarcula())) {
           Color bg = UIUtil.getTreeSelectionBackground(tree.hasFocus());
-          if (!selected) {
-            bg = background;
-          }
 
-          if (myWideSelectionCondition.value(row) || selected) {
+          if (myWideSelectionCondition.value(row)) {
             rowGraphics.setColor(bg);
             rowGraphics.fillRect(xOffset, bounds.y, containerWidth, bounds.height);
           }

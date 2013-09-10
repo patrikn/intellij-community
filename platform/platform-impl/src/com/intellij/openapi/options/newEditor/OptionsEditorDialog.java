@@ -53,22 +53,22 @@ public class OptionsEditorDialog extends DialogWrapper implements DataProvider{
   @NonNls static final String LAST_SELECTED_CONFIGURABLE = "options.lastSelected";
 
   /** This constructor should be eliminated after the new modality approach
-   *  will have been checked. See a {@code Registry} key ide.mac.modalDialogsOnFullscreen
+   *  will have been checked. See a {@code Registry} key ide.perProjectModality
    *  @deprecated
    */
   public OptionsEditorDialog(Project project, ConfigurableGroup[] groups,
                              @Nullable Configurable preselectedConfigurable, boolean applicationModalIfPossible) {
-    super(true, applicationModalIfPossible);
+    super(project, true, applicationModalIfPossible);
     init(project, groups, preselectedConfigurable != null ? preselectedConfigurable : findLastSavedConfigurable(groups, project));
   }
 
   /** This constructor should be eliminated after the new modality approach
-   *  will have been checked. See a {@code Registry} key ide.mac.modalDialogsOnFullscreen
+   *  will have been checked. See a {@code Registry} key ide.perProjectModality
    *  @deprecated
    */
   public OptionsEditorDialog(Project project, ConfigurableGroup[] groups,
                              @NotNull String preselectedConfigurableDisplayName, boolean applicationModalIfPossible) {
-    super(true, applicationModalIfPossible);
+    super(project, true, applicationModalIfPossible);
     init(project, groups, getPreselectedByDisplayName(groups, preselectedConfigurableDisplayName, project));
   }
 

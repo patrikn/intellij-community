@@ -15,7 +15,7 @@
  */
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
-import com.intellij.codeInsight.CodeInsightUtilBase;
+import com.intellij.codeInsight.CodeInsightUtilCore;
 import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInsight.generation.OverrideImplementUtil;
 import com.intellij.codeInsight.template.Template;
@@ -41,7 +41,7 @@ public class CreateConstructorFromCallFix extends CreateFromUsageBaseFix {
 
   private final PsiConstructorCall myConstructorCall;
 
-  public CreateConstructorFromCallFix(PsiConstructorCall constructorCall) {
+  public CreateConstructorFromCallFix(@NotNull PsiConstructorCall constructorCall) {
     myConstructorCall = constructorCall;
   }
 
@@ -65,7 +65,7 @@ public class CreateConstructorFromCallFix extends CreateFromUsageBaseFix {
                                                  getTargetSubstitutor(myConstructorCall));
       final PsiMethod superConstructor = CreateClassFromNewFix.setupSuperCall(targetClass, constructor, templateBuilder);
 
-      constructor = CodeInsightUtilBase.forcePsiPostprocessAndRestoreElement(constructor);
+      constructor = CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(constructor);
       Template template = templateBuilder.buildTemplate();
       final Editor editor = positionCursor(project, targetClass.getContainingFile(), targetClass);
       if (editor == null) return;

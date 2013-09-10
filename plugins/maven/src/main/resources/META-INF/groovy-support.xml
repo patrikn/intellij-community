@@ -2,9 +2,7 @@
   <extensions defaultExtensionNs="org.jetbrains.idea.maven">
     <importer implementation="org.jetbrains.idea.maven.importing.Groovy_1_0_Importer"/>
     <importer implementation="org.jetbrains.idea.maven.importing.Groovy_1_1_plus_Importer"/>
-  </extensions>
 
-  <extensions defaultExtensionNs="org.jetbrains.idea.maven">
     <pluginDescriptor mavenId="org.codehaus.groovy.maven:gmaven-plugin">
       <param name="source" languageProvider="org.jetbrains.idea.maven.plugins.groovy.MavenGroovyLanguageProvider"/>
     </pluginDescriptor>
@@ -12,5 +10,9 @@
     <pluginDescriptor mavenId="org.codehaus.gmaven:gmaven-plugin">
       <param name="source" languageProvider="org.jetbrains.idea.maven.plugins.groovy.MavenGroovyLanguageProvider"/>
     </pluginDescriptor>
+  </extensions>
+
+  <extensions defaultExtensionNs="org.intellij.groovy">
+    <membersContributor implementation="org.jetbrains.idea.maven.plugins.groovy.MavenGroovyPomScriptMemberContributor"/>
   </extensions>
 </idea-plugin>

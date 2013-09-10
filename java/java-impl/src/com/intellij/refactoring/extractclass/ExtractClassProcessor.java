@@ -15,6 +15,7 @@
  */
 package com.intellij.refactoring.extractclass;
 
+import com.intellij.codeInsight.generation.GenerateMembersUtil;
 import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.ide.util.PackageUtil;
 import com.intellij.openapi.application.ApplicationManager;
@@ -53,6 +54,7 @@ import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.refactoring.util.classMembers.MemberInfo;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.usageView.UsageViewDescriptor;
+import com.intellij.usageView.UsageViewUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.VisibilityUtil;
 import com.intellij.util.containers.ContainerUtil;
@@ -310,17 +312,17 @@ public class ExtractClassProcessor extends FixableUsagesRefactoringProcessor {
     if (myGenerateAccessors) {
       final NecessaryAccessorsVisitor visitor = checkNecessaryGettersSetters4SourceClass();
       for (PsiField field : visitor.getFieldsNeedingGetter()) {
-        sourceClass.add(PropertyUtil.generateGetterPrototype(field));
+        sourceClass.add(GenerateMembersUtil.generateGetterPrototype(field));
       }
 
       for (PsiField field : visitor.getFieldsNeedingSetter()) {
-        sourceClass.add(PropertyUtil.generateSetterPrototype(field));
+        sourceClass.add(GenerateMembersUtil.generateSetterPrototype(field));
       }
     }
     super.performRefactoring(usageInfos);
     if (myNewVisibility == null) return;
     for (PsiMember member : members) {
-      VisibilityUtil.fixVisibility(usageInfos, member, myNewVisibility);
+      VisibilityUtil.fixVisibility(UsageViewUtil.toElements(usageInfos), member, myNewVisibility);
     }
   }
 

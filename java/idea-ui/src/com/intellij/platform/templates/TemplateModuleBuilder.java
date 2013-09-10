@@ -83,7 +83,7 @@ public class TemplateModuleBuilder extends ModuleBuilder {
   }
 
   @Override
-  public ModuleWizardStep[] createWizardSteps(WizardContext wizardContext, ModulesProvider modulesProvider) {
+  public ModuleWizardStep[] createWizardSteps(@NotNull WizardContext wizardContext, @NotNull ModulesProvider modulesProvider) {
     ModuleBuilder builder = myType.createModuleBuilder();
     builder.setAvailableFrameworks(Collections.<String, Boolean>emptyMap());
     return builder.createWizardSteps(wizardContext, modulesProvider);
@@ -172,7 +172,7 @@ public class TemplateModuleBuilder extends ModuleBuilder {
   }
 
   private void fixModuleName(Module module) {
-    RunConfiguration[] configurations = RunManager.getInstance(module.getProject()).getAllConfigurations();
+    List<RunConfiguration> configurations = RunManager.getInstance(module.getProject()).getAllConfigurationsList();
     for (RunConfiguration configuration : configurations) {
       if (configuration instanceof ModuleBasedConfiguration) {
         ((ModuleBasedConfiguration)configuration).getConfigurationModule().setModule(module);
@@ -205,7 +205,7 @@ public class TemplateModuleBuilder extends ModuleBuilder {
         @Nullable
         @Override
         public String fun(String path) {
-          if (moduleMode && path.contains(".idea")) return null;
+          if (moduleMode && path.contains(Project.DIRECTORY_STORE_FOLDER)) return null;
           if (basePackage != null) {
             return path.replace(getPathFragment(basePackage.getDefaultValue()), getPathFragment(basePackage.getValue()));
           }
@@ -218,7 +218,7 @@ public class TemplateModuleBuilder extends ModuleBuilder {
           FileType fileType = FileTypeManager.getInstance().getFileTypeByExtension(FileUtilRt.getExtension(file.getName()));
           return fileType.isBinary() ? content : processTemplates(projectName, new String(content), file);
         }
-      });
+      }, true);
       String iml = ContainerUtil.find(dir.list(), new Condition<String>() {
         @Override
         public boolean value(String s) {

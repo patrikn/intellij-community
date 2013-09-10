@@ -34,6 +34,7 @@ import com.intellij.ui.tabs.impl.singleRow.SingleRowLayout;
 import com.intellij.ui.tabs.impl.singleRow.SingleRowPassInfo;
 import com.intellij.ui.tabs.impl.table.TableLayout;
 import com.intellij.ui.tabs.impl.table.TablePassInfo;
+import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.Animator;
 import com.intellij.util.ui.JBInsets;
@@ -557,18 +558,9 @@ public class JBTabsImpl extends JComponent
       return;
     }
     mySingleRowLayout.myMorePopup = new JBPopupMenu();
-    float grayPercent = 0.9f;
     for (final TabInfo each : myVisibleInfos) {
-      final JMenuItem item = new JBCheckboxMenuItem(each.getText(), getSelectedInfo() == each);
-      item.setIcon(each.getIcon());
-      Color color = UIManager.getColor("MenuItem.background");
-      if (color != null) {
-        if (mySingleRowLayout.isTabHidden(each)) {
-          color = new Color((int) (color.getRed() * grayPercent), (int) (color.getGreen() * grayPercent), (int) (color.getBlue() * grayPercent));
-        }
-        item.setBackground(color);
-      }
-
+      if (!mySingleRowLayout.isTabHidden(each)) continue;
+      final JBMenuItem item = new JBMenuItem(each.getText(), each.getIcon());
       mySingleRowLayout.myMorePopup.add(item);
       item.addActionListener(new ActionListener() {
         @Override
@@ -1419,6 +1411,8 @@ public class JBTabsImpl extends JComponent
       }
 
       if (isSingleRow()) {
+        myLastLayoutPass = mySingleRowLayout.layoutSingleRow(visible);
+        mySingleRowLayout.scroll(0);
         myLastLayoutPass = mySingleRowLayout.layoutSingleRow(visible);
         myTableLayout.myLastTableLayout = null;
       }
@@ -2276,9 +2270,9 @@ public class JBTabsImpl extends JComponent
 
   @Override
   public Dimension getMinimumSize() {
-    return computeSize(new Transform<JComponent, Dimension>() {
+    return computeSize(new Function<JComponent, Dimension>() {
       @Override
-      public Dimension transform(JComponent component) {
+      public Dimension fun(JComponent component) {
         return component.getMinimumSize();
       }
     }, 1);
@@ -2286,20 +2280,20 @@ public class JBTabsImpl extends JComponent
 
   @Override
   public Dimension getPreferredSize() {
-    return computeSize(new Transform<JComponent, Dimension>() {
+    return computeSize(new Function<JComponent, Dimension>() {
       @Override
-      public Dimension transform(JComponent component) {
+      public Dimension fun(JComponent component) {
         return component.getPreferredSize();
       }
     }, 3);
   }
 
-  private Dimension computeSize(Transform<JComponent, Dimension> transform, int tabCount) {
+  private Dimension computeSize(Function<JComponent, Dimension> transform, int tabCount) {
     Dimension size = new Dimension();
     for (TabInfo each : myVisibleInfos) {
       final JComponent c = each.getComponent();
       if (c != null) {
-        final Dimension eachSize = transform.transform(c);
+        final Dimension eachSize = transform.fun(c);
         size.width = Math.max(eachSize.width, size.width);
         size.height = Math.max(eachSize.height, size.height);
       }

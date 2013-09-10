@@ -547,6 +547,10 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
     doTest();
   }
 
+  public void testFromLambdaBody1() throws Exception {
+    doTest();
+  }
+
   public void testOneLineLambda() throws Exception {
     doTest();
   }
@@ -581,6 +585,18 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
 
   public void testArrayReturnType() throws Exception {
     doDuplicatesTest();
+  }
+
+  public void testOverloadedMethods() throws Exception {
+    doDuplicatesTest();
+  }
+
+  public void testTargetAnonymous() throws Exception {
+    doTest();
+  }
+
+  public void testExpression() throws Exception {
+    doTest();
   }
 
   private void doTestDisabledParam() throws PrepareFailedException {

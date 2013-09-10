@@ -1,4 +1,3 @@
-
 package com.intellij.openapi.vcs.changes.committed;
 
 import com.intellij.ide.CopyProvider;
@@ -345,7 +344,7 @@ public class CommittedChangesTreeBrowser extends JPanel implements TypeSafeDataP
     toolbarGroup.add(leadGroup);
     toolbarGroup.addSeparator();
     toolbarGroup.add(new SelectFilteringAction(project, this));
-    toolbarGroup.add(new SelectGroupingAction(this));
+    toolbarGroup.add(new SelectGroupingAction(project, this));
     final ExpandAllAction expandAllAction = new ExpandAllAction(myChangesTree);
     final CollapseAllAction collapseAllAction = new CollapseAllAction(myChangesTree);
     expandAllAction.registerCustomShortcutSet(
@@ -498,8 +497,8 @@ public class CommittedChangesTreeBrowser extends JPanel implements TypeSafeDataP
         sink.put(PlatformDataKeys.TREE_EXPANDER, myTreeExpander);
       } else {
         final String name = key.getName();
-        if (VcsDataKeys.SELECTED_CHANGES.is(name) || VcsDataKeys.CHANGES.is(name)
-          || VcsDataKeys.CHANGE_LEAD_SELECTION.is(name) || CommittedChangesBrowserUseCase.DATA_KEY.is(name)) {
+        if (VcsDataKeys.SELECTED_CHANGES.is(name) || VcsDataKeys.CHANGE_LEAD_SELECTION.is(name) ||
+            CommittedChangesBrowserUseCase.DATA_KEY.is(name)) {
           final Object data = myDetailsView.getData(name);
           if (data != null) {
             sink.put(key, data);

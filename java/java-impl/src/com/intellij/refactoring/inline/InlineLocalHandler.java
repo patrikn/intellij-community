@@ -36,16 +36,14 @@ import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
-import com.intellij.psi.util.PsiUtilBase;
+import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.refactoring.HelpID;
 import com.intellij.refactoring.RefactoringBundle;
 import com.intellij.refactoring.util.CommonRefactoringUtil;
 import com.intellij.refactoring.util.InlineUtil;
 import com.intellij.refactoring.util.RefactoringMessageDialog;
-import com.intellij.util.ArrayUtil;
-import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.Processor;
-import com.intellij.util.Query;
+import com.intellij.util.*;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -104,7 +102,7 @@ public class InlineLocalHandler extends JavaInlineActionHandler {
               }
               innerClass = parentPsiClass;
               continue;
-            } 
+            }
             innerClassesWithUsages.add(innerClass);
             innerClassUsages.add(element);
           }
@@ -143,7 +141,7 @@ public class InlineLocalHandler extends JavaInlineActionHandler {
       CommonRefactoringUtil.showErrorHint(project, editor, message, REFACTORING_NAME, HelpID.INLINE_VARIABLE);
       return;
     }
-    final PsiElement[] refsToInline = PsiUtilBase.toPsiElementArray(refsToInlineList);
+    final PsiElement[] refsToInline = PsiUtilCore.toPsiElementArray(refsToInlineList);
 
     EditorColorsManager manager = EditorColorsManager.getInstance();
     final TextAttributes attributes = manager.getGlobalScheme().getAttributes(EditorColors.SEARCH_RESULT_ATTRIBUTES);
@@ -195,7 +193,7 @@ public class InlineLocalHandler extends JavaInlineActionHandler {
       }
     }
 
-    final PsiElement writeAccess = checkRefsInAugmentedAssignmentOrUnaryModified(refsToInline);
+    final PsiElement writeAccess = checkRefsInAugmentedAssignmentOrUnaryModified(refsToInline, defToInline);
     if (writeAccess != null) {
       HighlightManager.getInstance(project).addOccurrenceHighlights(editor, new PsiElement[]{writeAccess}, writeAttributes, true, null);
       String message = RefactoringBundle.getCannotRefactorMessage(RefactoringBundle.message("variable.is.accessed.for.writing", localName));
@@ -234,10 +232,11 @@ public class InlineLocalHandler extends JavaInlineActionHandler {
     final Runnable runnable = new Runnable() {
       public void run() {
         try{
-          PsiExpression[] exprs = new PsiExpression[refsToInline.length];
+          SmartPsiElementPointer<PsiExpression>[] exprs = new SmartPsiElementPointer[refsToInline.length];
+          final SmartPointerManager pointerManager = SmartPointerManager.getInstance(project);
           for(int idx = 0; idx < refsToInline.length; idx++){
             PsiJavaCodeReferenceElement refElement = (PsiJavaCodeReferenceElement)refsToInline[idx];
-            exprs[idx] = InlineUtil.inlineVariable(local, defToInline, refElement);
+            exprs[idx] = pointerManager.createSmartPsiElementPointer(InlineUtil.inlineVariable(local, defToInline, refElement));
           }
 
           if (!isInliningVariableInitializer(defToInline)) {
@@ -251,12 +250,17 @@ public class InlineLocalHandler extends JavaInlineActionHandler {
           }
 
           if (editor != null && !ApplicationManager.getApplication().isUnitTestMode()) {
-            highlightManager.addOccurrenceHighlights(editor, exprs, attributes, true, null);
+            highlightManager.addOccurrenceHighlights(editor, ContainerUtil.convert(exprs, new PsiExpression[refsToInline.length], new Function<SmartPsiElementPointer<PsiExpression>, PsiExpression>() {
+              @Override
+              public PsiExpression fun(SmartPsiElementPointer<PsiExpression> pointer) {
+                return pointer.getElement();
+              }
+            }), attributes, true, null);
             WindowManager.getInstance().getStatusBar(project).setInfo(RefactoringBundle.message("press.escape.to.remove.the.highlighting"));
           }
 
-          for (final PsiExpression expr : exprs) {
-            InlineUtil.tryToInlineArrayCreationForVarargs(expr);
+          for (final SmartPsiElementPointer<PsiExpression> expr : exprs) {
+            InlineUtil.tryToInlineArrayCreationForVarargs(expr.getElement());
           }
         }
         catch (IncorrectOperationException e){
@@ -273,12 +277,13 @@ public class InlineLocalHandler extends JavaInlineActionHandler {
   }
 
   @Nullable
-  public static PsiElement checkRefsInAugmentedAssignmentOrUnaryModified(final PsiElement[] refsToInline) {
+  public static PsiElement checkRefsInAugmentedAssignmentOrUnaryModified(final PsiElement[] refsToInline, PsiElement defToInline) {
     for (PsiElement element : refsToInline) {
 
       PsiElement parent = element.getParent();
       if (parent instanceof PsiArrayAccessExpression) {
         if (((PsiArrayAccessExpression)parent).getIndexExpression() == element) continue;
+        if (defToInline instanceof PsiExpression && !(defToInline instanceof PsiNewExpression)) continue;
         element = parent;
         parent = parent.getParent();
       }

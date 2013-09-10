@@ -20,6 +20,10 @@ import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.jps.model.module.JpsModuleSourceRootType;
+
+import java.util.List;
+import java.util.Set;
 
 /**
  * Interface providing root information model for a given module.
@@ -43,6 +47,7 @@ public interface ModuleRootModel {
    * @return list of content entries for this module
    * @see ContentEntry
    */
+  @NotNull
   ContentEntry[] getContentEntries();
 
   /**
@@ -128,6 +133,23 @@ public interface ModuleRootModel {
   VirtualFile[] getSourceRoots(boolean includingTests);
 
   /**
+   * Return a list of source roots of the specified type
+   * @param rootType type of source roots
+   * @return list of source roots
+   */
+  @NotNull
+  List<VirtualFile> getSourceRoots(@NotNull JpsModuleSourceRootType<?> rootType);
+
+  /**
+   * Return a list of source roots which types belong to the specified set
+   *
+   * @param rootTypes types of source roots
+   * @return list of source roots
+   */
+  @NotNull
+  List<VirtualFile> getSourceRoots(@NotNull Set<? extends JpsModuleSourceRootType<?>> rootTypes);
+
+  /**
    * Returns an array of source root urls from all content entries. A helper method.
    *
    * @return the array of source root URLs.
@@ -145,20 +167,6 @@ public interface ModuleRootModel {
    * @since 10.0
    */
   @NotNull String[] getSourceRootUrls(boolean includingTests);
-
-  /**
-   * @deprecated moved to J2ME plugin
-   */
-  @Deprecated
-  @Nullable
-  VirtualFile getExplodedDirectory();
-
-  /**
-   * @deprecated moved to J2ME plugin
-   */
-  @Deprecated
-  @Nullable
-  String getExplodedDirectoryUrl();
 
   /**
    * Passes all order entries in the module to the specified visitor.
@@ -186,18 +194,6 @@ public interface ModuleRootModel {
    * @return the list of module names this module depends on.
    */
   @NotNull String[] getDependencyModuleNames();
-
-  /**
-   * @deprecated use {@code JavaModuleExternalPaths} instead
-   */
-  @Deprecated
-  @NotNull VirtualFile[] getRootPaths(OrderRootType rootType);
-
-  /**
-   * @deprecated use {@code JavaModuleExternalPaths} instead
-   */
-  @Deprecated
-  @NotNull String[] getRootUrls(OrderRootType rootType);
 
   <T> T getModuleExtension(Class<T> klass);
 

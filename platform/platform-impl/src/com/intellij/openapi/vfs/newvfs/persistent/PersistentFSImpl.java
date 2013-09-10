@@ -338,7 +338,7 @@ public class PersistentFSImpl extends PersistentFS implements ApplicationCompone
   }
 
   private static boolean namesEqual(@NotNull VirtualFileSystem fs, @NotNull String n1, String n2) {
-    return ((NewVirtualFileSystem)fs).isCaseSensitive() ? n1.equals(n2) : n1.equalsIgnoreCase(n2);
+    return fs.isCaseSensitive() ? n1.equals(n2) : n1.equalsIgnoreCase(n2);
   }
 
   @Override
@@ -853,7 +853,9 @@ public class PersistentFSImpl extends PersistentFS implements ApplicationCompone
             // do not call super method since we know it's the root
             String name = getName();
             int nameLength = name.length();
-            boolean appendSlash = SystemInfo.isWindows && nameLength == 2 && name.charAt(1) == ':';
+            boolean appendSlash = SystemInfo.isWindows && nameLength == 2 && name.charAt(1) == ':'
+                                  && pathLength == 0 // otherwise we called this as a part of longer file path calculation and slash will be added anyway
+              ;
 
             int rootPathLength = pathLength + nameLength;
             if (appendSlash) ++rootPathLength;
@@ -1053,6 +1055,9 @@ public class PersistentFSImpl extends PersistentFS implements ApplicationCompone
         else if (VirtualFile.PROP_HIDDEN.equals(propertyChangeEvent.getPropertyName())) {
           executeSetHidden(propertyChangeEvent.getFile(), ((Boolean)propertyChangeEvent.getNewValue()).booleanValue());
         }
+        else if (VirtualFile.PROP_SYMLINK_TARGET.equals(propertyChangeEvent.getPropertyName())) {
+          executeSetTarget(propertyChangeEvent.getFile(), (String)propertyChangeEvent.getNewValue());
+        }
       }
     }
     catch (Exception e) {
@@ -1162,12 +1167,18 @@ public class PersistentFSImpl extends PersistentFS implements ApplicationCompone
     FSRecords.setName(id, newName);
   }
 
-  private static void executeSetWritable(@NotNull VirtualFile file, final boolean writableFlag) {
+  private static void executeSetWritable(@NotNull VirtualFile file, boolean writableFlag) {
     setFlag(file, IS_READ_ONLY, !writableFlag);
+    ((VirtualFileSystemEntry)file).updateProperty(VirtualFile.PROP_WRITABLE, writableFlag);
   }
 
-  private static void executeSetHidden(@NotNull VirtualFile file, final boolean hiddenFlag) {
+  private static void executeSetHidden(@NotNull VirtualFile file, boolean hiddenFlag) {
     setFlag(file, IS_HIDDEN, hiddenFlag);
+    ((VirtualFileSystemEntry)file).updateProperty(VirtualFile.PROP_HIDDEN, hiddenFlag);
+  }
+
+  private static void executeSetTarget(@NotNull VirtualFile file, String target) {
+    ((VirtualFileSystemEntry)file).setLinkTarget(target);
   }
 
   private static void setFlag(@NotNull VirtualFile file, int mask, boolean value) {

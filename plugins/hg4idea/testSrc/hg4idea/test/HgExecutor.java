@@ -42,10 +42,6 @@ public class HgExecutor extends Executor {
     if (exec != null) {
       return exec;
     }
-    exec = findInPath(programName, unixExec, winExec);
-    if (exec != null) {
-      return exec;
-    }
     exec = findInSources(programName, unixExec, winExec);
     if (exec != null) {
       return exec;
@@ -69,6 +65,12 @@ public class HgExecutor extends Executor {
     split.add(0, HG_EXECUTABLE);
     log("hg " + command);
     return run(split);
+  }
+
+  public static void updateProject() {
+    hg("pull");
+    hg("update");
+    hg("merge");
   }
 
   @NotNull

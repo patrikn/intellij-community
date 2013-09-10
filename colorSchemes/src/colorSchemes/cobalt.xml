@@ -138,6 +138,11 @@
         <option name="FOREGROUND" value="CCCCCC" />
       </value>
     </option>
+    <option name="COFFEESCRIPT.PARAMETER">
+      <value>
+        <option name="FOREGROUND" value="CCCCCC" />
+      </value>
+    </option>
     <option name="COFFEESCRIPT.HEREDOC_CONTENT">
       <value>
         <option name="FOREGROUND" value="3AD900" />
@@ -1487,6 +1492,16 @@
       </value>
     </option>
     <option name="RUBY_BRACKETS">
+      <value>
+        <option name="FOREGROUND" value="E1EFFF" />
+      </value>
+    </option>
+    <option name="RUBY_BRACES">
+      <value>
+        <option name="FOREGROUND" value="E1EFFF" />
+      </value>
+    </option>
+    <option name="RUBY_PARENTHESES">
       <value>
         <option name="FOREGROUND" value="E1EFFF" />
       </value>

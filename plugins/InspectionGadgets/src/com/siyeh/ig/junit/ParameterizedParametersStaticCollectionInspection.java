@@ -46,6 +46,7 @@ public class ParameterizedParametersStaticCollectionInspection extends BaseInspe
   private static final String PARAMETERS_FQN = "org.junit.runners.Parameterized.Parameters";
   private static final String PARAMETERIZED_FQN = "org.junit.runners.Parameterized";
 
+  @Override
   @NotNull
   protected String buildErrorString(Object... infos) {
     return infos.length > 0
@@ -53,6 +54,7 @@ public class ParameterizedParametersStaticCollectionInspection extends BaseInspe
            : "Class #ref annotated @RunWith(Parameterized.class) lacks data provider";
   }
 
+  @Override
   public BaseInspectionVisitor buildVisitor() {
     return new BaseInspectionVisitor() {
       @Override
@@ -142,13 +144,21 @@ public class ParameterizedParametersStaticCollectionInspection extends BaseInspe
         }
       }
 
+      @Override
       @NotNull
       public String getName() {
         return infos.length > 0 ? (String)infos[0] : "Create @Parameterized.Parameters data provider";
       }
+
+      @NotNull
+      @Override
+      public String getFamilyName() {
+        return "Fix data provider signature";
+      }
     };
   }
 
+  @Override
   @Nls
   @NotNull
   public String getDisplayName() {

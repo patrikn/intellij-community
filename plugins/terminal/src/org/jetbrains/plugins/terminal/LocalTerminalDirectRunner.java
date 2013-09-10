@@ -1,39 +1,97 @@
 package org.jetbrains.plugins.terminal;
 
-import com.intellij.execution.process.OSProcessHandler;
-import com.intellij.execution.process.ProcessHandler;
+import com.intellij.execution.TaskExecutor;
+import com.intellij.execution.process.*;
+import com.intellij.openapi.application.Application;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
-import com.jediterm.emulator.TtyConnector;
-import com.jediterm.pty.PtyProcess;
+import com.intellij.openapi.roots.ProjectRootManager;
+import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.util.Consumer;
+import com.intellij.util.containers.HashMap;
 import com.jediterm.pty.PtyProcessTtyConnector;
+import com.jediterm.terminal.TtyConnector;
+import com.pty4j.PtyProcess;
+import com.pty4j.util.PtyUtil;
+import org.jetbrains.annotations.Nullable;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.Charset;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /**
  * @author traff
  */
 public class LocalTerminalDirectRunner extends AbstractTerminalRunner<PtyProcess> {
+  private static final Logger LOG = Logger.getInstance(LocalTerminalDirectRunner.class);
 
   private final Charset myDefaultCharset;
-  private final String myCommand;
-  private final String[] myArguments;
+  private final String[] myCommand;
 
-  public LocalTerminalDirectRunner(Project project, Charset charset, String command, String[] arguments) {
+  public LocalTerminalDirectRunner(Project project) {
     super(project);
-    myDefaultCharset = charset;
-    myCommand = command;
-    myArguments = arguments;
+    myDefaultCharset = Charset.forName("UTF-8");
+
+    if (SystemInfo.isUnix) {
+      File rcFile = findRCFile();
+
+      if (rcFile != null) {
+        myCommand = new String[]{"/bin/bash", "--rcfile", rcFile.getAbsolutePath(), "-i"};
+      }
+      else {
+        myCommand = new String[]{"/bin/bash", "--login"};
+      }
+    }
+    else {
+      myCommand = new String[]{"cmd.exe"};
+    }
+  }
+
+  private static File findRCFile() {
+    try {
+      final String folder = PtyUtil.getJarFolder();
+      if (folder != null) {
+        File rcFile = new File(folder, "jediterm.in");
+        if (rcFile.exists()) {
+          return rcFile;
+        }
+      }
+    }
+    catch (Exception e) {
+      LOG.warn("Unable to get jar folder", e);
+    }
+    return null;
   }
 
   @Override
   protected PtyProcess createProcess() throws ExecutionException {
-    return new PtyProcess(myCommand, myArguments);
+    Map<String, String> envs = new HashMap<String, String>(System.getenv());
+    envs.put("TERM", "xterm");
+    try {
+      return PtyProcess.exec(myCommand, envs, currentProjectFolder());
+    }
+    catch (IOException e) {
+      throw new ExecutionException(e);
+    }
+  }
+
+  private String currentProjectFolder() {
+    for (VirtualFile vf : ProjectRootManager.getInstance(myProject).getContentRoots()) {
+      return vf.getCanonicalPath();
+    }
+    return null;
   }
 
   @Override
-  protected ProcessHandler createProcessHandler(PtyProcess process) {
-    return new OSProcessHandler(process);
+  protected ProcessHandler createProcessHandler(final PtyProcess process) {
+    return new PtyProcessHandler(process);
   }
 
   @Override
@@ -43,6 +101,80 @@ public class LocalTerminalDirectRunner extends AbstractTerminalRunner<PtyProcess
 
   @Override
   protected String getTerminalConnectionName(PtyProcess process) {
-    return process.getCommandLineString();
+    return StringUtil.join(myCommand);
+  }
+
+  private static class PtyProcessHandler extends ProcessHandler implements TaskExecutor {
+
+    private final PtyProcess myProcess;
+    private final ProcessWaitFor myWaitFor;
+
+    public PtyProcessHandler(PtyProcess process) {
+      myProcess = process;
+      myWaitFor = new ProcessWaitFor(process, this);
+    }
+
+    @Override
+    public void startNotify() {
+      addProcessListener(new ProcessAdapter() {
+        @Override
+        public void startNotified(ProcessEvent event) {
+          try {
+            myWaitFor.setTerminationCallback(new Consumer<Integer>() {
+              @Override
+              public void consume(Integer integer) {
+                notifyProcessTerminated(integer);
+              }
+            });
+          }
+          finally {
+            removeProcessListener(this);
+          }
+        }
+      });
+
+      super.startNotify();
+    }
+
+    @Override
+    protected void destroyProcessImpl() {
+      myProcess.destroy();
+    }
+
+    @Override
+    protected void detachProcessImpl() {
+      destroyProcessImpl();
+    }
+
+    @Override
+    public boolean detachIsDefault() {
+      return false;
+    }
+
+    @Override
+    public boolean isSilentlyDestroyOnClose() {
+      return true;
+    }
+
+    @Nullable
+    @Override
+    public OutputStream getProcessInput() {
+      return myProcess.getOutputStream();
+    }
+
+    @Override
+    public Future<?> executeTask(Runnable task) {
+      return executeOnPooledThread(task);
+    }
+
+    protected static Future<?> executeOnPooledThread(Runnable task) {
+      final Application application = ApplicationManager.getApplication();
+
+      if (application != null) {
+        return application.executeOnPooledThread(task);
+      }
+
+      return BaseOSProcessHandler.ExecutorServiceHolder.submit(task);
+    }
   }
 }

@@ -15,6 +15,7 @@
  */
 package org.jetbrains.plugins.groovy.lang.highlighting
 
+import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.codeInspection.InspectionProfileEntry
 import org.jetbrains.plugins.groovy.codeInspection.assignment.GroovyAssignabilityCheckInspection
 import org.jetbrains.plugins.groovy.codeInspection.bugs.GroovyConstructorNamedArgumentsInspection
@@ -231,9 +232,9 @@ class A {
 def foo = new A().&foo
 
 int i = foo()
-int i2 = <warning descr="Cannot assign 'Date' to 'int'">foo(2)</warning>
+int <warning descr="Cannot assign 'Date' to 'int'">i2</warning> = foo(2)
 Date d = foo(2)
-Date d2 = <warning descr="Cannot assign 'Integer' to 'Date'">foo()</warning>
+Date <warning descr="Cannot assign 'Integer' to 'Date'">d2</warning> = foo()
 ''')
   }
 
@@ -247,7 +248,7 @@ class Bar {
 def cl = new Bar<error descr="'(' expected">.</error>&foo
 cl = cl.curry(1)
 String s = cl("2")
-int s2 = <warning descr="Cannot assign 'String' to 'int'">cl("2")</warning>
+int <warning descr="Cannot assign 'String' to 'int'">s2</warning> = cl("2")
 int i = cl(3)
 String i2 = cl(3)
 ''')
@@ -259,7 +260,7 @@ def foo() {
   throw new RuntimeException()
 }
 def bar () {
-  throw <warning descr="Cannot assign 'Object' to 'Throwable'">new Object()</warning>
+  <warning descr="Cannot assign 'Object' to 'Throwable'">throw</warning> new Object()
 }
 
 def test() {
@@ -305,12 +306,12 @@ import groovy.transform.CompileStatic
 class A {
 
   def foo(String s) {
-    int x = <warning descr="Cannot assign 'Date' to 'int'">new Date()</warning>
+    int <warning descr="Cannot assign 'Date' to 'int'">x</warning> = new Date()
   }
 
   @CompileStatic
   def bar() {
-    int x = <error descr="Cannot assign 'Date' to 'int'">new Date()</error>
+    int <error descr="Cannot assign 'Date' to 'int'">x</error> = new Date()
   }
 }
 ''')
@@ -395,7 +396,7 @@ private int getObjects() {
         //...
     }
 
-    return <warning descr="Cannot assign 'String' to 'int'">''</warning>;
+    <warning descr="Cannot assign 'String' to 'int'">return</warning> '';
 }
 ''')
   }
@@ -445,17 +446,17 @@ String[] foox() {
 }
 
 int[] bar() {
-  return <warning descr="Cannot assign 'String' to 'int[]'">'ab'</warning>
+  <warning descr="Cannot assign 'String' to 'int[]'">return</warning> 'ab'
 }
 ''')
   }
 
   void testAssignNullToPrimitiveTypesAndWrappers() {
     testHighlighting('''\
-int x = <warning descr="Cannot assign 'null' to 'int'">null</warning>
-double y = <warning descr="Cannot assign 'null' to 'double'">null</warning>
+int <warning descr="Cannot assign 'null' to 'int'">x</warning> = null
+double <warning descr="Cannot assign 'null' to 'double'">y</warning> = null
 Integer z = null
-boolean a = <warning descr="Cannot assign 'null' to 'boolean'">null</warning>
+boolean <warning descr="Cannot assign 'null' to 'boolean'">a</warning> = null
 Boolean b = null
 ''')
   }
@@ -506,7 +507,7 @@ Money d = [amount: 100, currency:'USA']
   void testBooleanIsAssignableToAny() {
     testHighlighting('''\
       boolean b1 = new Object()
-      boolean b2 = <warning descr="Cannot assign 'null' to 'boolean'">null</warning>
+      boolean <warning descr="Cannot assign 'null' to 'boolean'">b2</warning> = null
       Boolean b3 = new Object()
       Boolean b4 = null
 ''')
@@ -686,11 +687,100 @@ class Foo extends PsiElement implements I {}
 
 interface I {}
 
-def <T extends PsiElement> T foo1(Class<T> x = <warning descr="Cannot assign 'Class<String>' to 'Class<? extends PsiElement>'">String</warning> ) {}
+def <T extends PsiElement> T foo1(Class<T> <warning descr="Cannot assign 'Class<String>' to 'Class<? extends PsiElement>'">x</warning> = String ) {}
 def <T extends PsiElement> T foo2(Class<T> x = PsiElement ) {}
 def <T> T foo3(Class<T> x = PsiElement ) {}
-def <T extends PsiElement & I> T foo4(Class<T> x = <warning descr="Cannot assign 'Class<PsiElement>' to 'Class<? extends PsiElement>'">PsiElement</warning> ) {}
+def <T extends PsiElement & I> T foo4(Class<T> <warning descr="Cannot assign 'Class<PsiElement>' to 'Class<? extends PsiElement>'">x</warning> = PsiElement ) {}
 def <T extends PsiElement & I> T foo5(Class<T> x = Foo ) {}
+''')
+  }
+
+  void testFixVariableType() {
+    testHighlighting('''\
+int <warning>x<caret>x</warning> = 'abc'
+''')
+
+
+    final IntentionAction intention = myFixture.findSingleIntention('Change variable')
+    myFixture.launchAction(intention)
+    myFixture.checkResult('''\
+String xx = 'abc'
+''')
+
+  }
+
+  void testFixVariableType2() {
+    testHighlighting('''\
+int xx = 5
+
+<warning>x<caret>x</warning> = 'abc'
+''')
+
+    final IntentionAction intention = myFixture.findSingleIntention('Change variable')
+    myFixture.launchAction(intention)
+    myFixture.checkResult('''\
+String xx = 5
+
+xx = 'abc'
+''')
+
+  }
+
+
+  void testInnerClassConstructor0() {
+    testHighlighting('''\
+class A {
+  class Inner {
+    def Inner() {}
+  }
+
+  def foo() {
+    new Inner() //correct
+  }
+
+  static def bar() {
+    new <error>Inner</error>() //semi-correct
+    new Inner(new A()) //correct
+  }
+}
+
+new A.Inner() //semi-correct
+new A.Inner(new A()) //correct
+''')
+  }
+
+  void testInnerClassConstructor1() {
+    testHighlighting('''\
+class A {
+  class Inner {
+    def Inner(A a) {}
+  }
+
+  def foo() {
+    new Inner(new A()) //correct
+    new Inner<warning>()</warning>
+    new Inner<warning>(new A(), new A())</warning>
+  }
+
+  static def bar() {
+    new Inner(new A(), new A()) //correct
+    new Inner<warning>(new A())</warning> //incorrect: first arg is recognized as an enclosing instance arg
+  }
+}
+
+new A.Inner<warning>()</warning> //incorrect
+new A.Inner<warning>(new A())</warning> //incorrect: first arg is recognized as an enclosing instance arg
+new A.Inner(new A(), new A()) //correct
+''')
+  }
+
+  void testClosureIsNotAssignableToSAMInGroovy2_1() {
+    testHighlighting('''\
+interface X {
+  def foo()
+}
+
+X <warning>x</warning> = {print 2}
 ''')
   }
 }

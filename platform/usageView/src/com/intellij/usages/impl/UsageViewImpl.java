@@ -28,6 +28,7 @@ import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
+import com.intellij.openapi.progress.util.TooManyUsagesStatus;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
@@ -40,6 +41,8 @@ import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.pom.Navigatable;
 import com.intellij.psi.PsiDocumentManager;
+import com.intellij.psi.SmartPointerManager;
+import com.intellij.psi.SmartPsiElementPointer;
 import com.intellij.ui.*;
 import com.intellij.ui.components.JBTabbedPane;
 import com.intellij.ui.content.Content;
@@ -73,8 +76,6 @@ import java.awt.event.*;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -257,9 +258,9 @@ public class UsageViewImpl implements UsageView, UsageModelTracker.UsageModelTra
   protected boolean searchHasBeenCancelled() {
     return false;
   }
-  
+
   protected void setCurrentSearchCancelled(boolean flag){}
-  
+
   private void setupCentralPanel() {
     myCentralPanel.removeAll();
     disposeUsageContextPanels();
@@ -750,14 +751,14 @@ public class UsageViewImpl implements UsageView, UsageModelTracker.UsageModelTra
   }
 
   private void doReRun() {
-    final AtomicInteger tooManyUsages = new AtomicInteger();
-    final CountDownLatch waitWhileUserClick = new CountDownLatch(1);
     final AtomicInteger usageCountWithoutDefinition = new AtomicInteger(0);
-    ProgressManager.getInstance().run(new Task.Backgroundable(myProject, UsageViewManagerImpl.getProgressTitle(myPresentation)) {
+    final Project project = myProject;
+    Task.Backgroundable task = new Task.Backgroundable(project, UsageViewManagerImpl.getProgressTitle(myPresentation)) {
       @Override
       public void run(@NotNull final ProgressIndicator indicator) {
+        final TooManyUsagesStatus tooManyUsagesStatus = TooManyUsagesStatus.createFor(indicator);
         setSearchInProgress(true);
-        final com.intellij.usages.UsageViewManager usageViewManager = com.intellij.usages.UsageViewManager.getInstance(myProject);
+
         setCurrentSearchCancelled(false);
 
         myChangesDetected = false;
@@ -766,32 +767,31 @@ public class UsageViewImpl implements UsageView, UsageModelTracker.UsageModelTra
           @Override
           public boolean process(final Usage usage) {
             if (searchHasBeenCancelled()) return false;
-            if (tooManyUsages.get() == 1) {
-              try {
-                waitWhileUserClick.await(1, TimeUnit.SECONDS);
-              }
-              catch (InterruptedException ignored) {
-              }
-            }
 
             boolean incrementCounter = !com.intellij.usages.UsageViewManager.isSelfUsage(usage, myTargets);
 
             if (incrementCounter) {
               final int usageCount = usageCountWithoutDefinition.incrementAndGet();
-              if (usageCount > UsageLimitUtil.USAGES_LIMIT && tooManyUsages.get() == 0 && tooManyUsages.compareAndSet(0, 1)) {
-                ((UsageViewManagerImpl)usageViewManager)
-                  .showTooManyUsagesWarning(indicator, waitWhileUserClick, usageCountWithoutDefinition.get(), UsageViewImpl.this);
+              if (usageCount > UsageLimitUtil.USAGES_LIMIT) {
+                if (tooManyUsagesStatus.switchTooManyUsagesStatus()) {
+                  UsageViewManagerImpl
+                    .showTooManyUsagesWarning(project, tooManyUsagesStatus, indicator, usageCountWithoutDefinition.get(), UsageViewImpl.this);
+                }
               }
-              appendUsage(usage);
+              ApplicationManager.getApplication().runReadAction(new Runnable() {
+                public void run() {
+                  appendUsage(usage);
+                }
+              });
             }
-            ProgressIndicator indicator = ProgressManager.getInstance().getProgressIndicator();
-            return indicator == null || !indicator.isCanceled();
+            return !indicator.isCanceled();
           }
         });
         drainQueuedUsageNodes();
         setSearchInProgress(false);
       }
-    });
+    };
+    ProgressManager.getInstance().run(task);
   }
 
   private void reset() {
@@ -1031,6 +1031,19 @@ public class UsageViewImpl implements UsageView, UsageModelTracker.UsageModelTra
       ToolTipManager.sharedInstance().unregisterComponent(myTree);
       myModelTracker.removeListener(this);
       myUpdateAlarm.cancelAllRequests();
+    }
+    disposeSmartPointers();
+  }
+
+  private void disposeSmartPointers() {
+    SmartPointerManager pointerManager = SmartPointerManager.getInstance(getProject());
+    for (Usage usage : myUsageNodes.keySet()) {
+      if (usage instanceof UsageInfo2UsageAdapter) {
+        SmartPsiElementPointer<?> pointer = ((UsageInfo2UsageAdapter)usage).getUsageInfo().getSmartPointer();
+        if (pointer != null) {
+          pointerManager.removePointer(pointer);
+        }
+      }
     }
   }
 

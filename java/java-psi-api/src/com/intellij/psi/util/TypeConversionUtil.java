@@ -29,6 +29,7 @@ import com.intellij.util.containers.HashMap;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
 import gnu.trove.TObjectIntHashMap;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -159,7 +160,7 @@ public class TypeConversionUtil {
         final PsiClass resolved = ((PsiClassType)toType).resolve();
         if (resolved instanceof PsiTypeParameter) {
           for (final PsiClassType boundType : resolved.getExtendsListTypes()) {
-            if (!isNarrowingReferenceConversionAllowed(fromType, boundType)) return false;
+            if (!areTypesConvertible(fromType, boundType)) return false;
           }
           return true;
         }
@@ -445,8 +446,6 @@ public class TypeConversionUtil {
 
   /**
    * @param tokenType JavaTokenType enumeration
-   * @param lOperand
-   * @param rOperand
    * @param strict    true if operator result type should be convertible to the left operand
    * @return true if lOperand operator rOperand expression is syntactically correct
    */
@@ -480,16 +479,14 @@ public class TypeConversionUtil {
       }
       else {
         if (isPrimitiveAndNotNull(ltype)) {
-          if (rtype instanceof PsiClassType && ((PsiClassType)rtype).getLanguageLevel().isAtLeast(LanguageLevel.JDK_1_7)) {
-            return areTypesConvertible(ltype, rtype);
-          }
-          return false;
+          return rtype instanceof PsiClassType &&
+                 ((PsiClassType)rtype).getLanguageLevel().isAtLeast(LanguageLevel.JDK_1_5) &&
+                 areTypesConvertible(ltype, rtype);
         }
         if (isPrimitiveAndNotNull(rtype)) {
-          if (ltype instanceof PsiClassType && ((PsiClassType)ltype).getLanguageLevel().isAtLeast(LanguageLevel.JDK_1_7)) {
-            return areTypesConvertible(rtype, ltype);
-          }
-          return false;
+          return ltype instanceof PsiClassType &&
+                 ((PsiClassType)ltype).getLanguageLevel().isAtLeast(LanguageLevel.JDK_1_7) &&
+                 areTypesConvertible(rtype, ltype);
         }
         isApplicable = areTypesConvertible(ltype, rtype) || areTypesConvertible(rtype, ltype);
       }
@@ -693,10 +690,7 @@ public class TypeConversionUtil {
         final PsiType lType = lLambdaExpression.getFunctionalInterfaceType();
         return Comparing.equal(rType, lType);
       }
-      if (left instanceof PsiArrayType) {
-        return false;
-      }
-      return LambdaUtil.isAcceptable(rLambdaExpression, left, false);
+      return !(left instanceof PsiArrayType) && LambdaUtil.isAcceptable(rLambdaExpression, left, false);
     }
 
     if (left instanceof PsiIntersectionType) {
@@ -745,9 +739,7 @@ public class TypeConversionUtil {
       if (lCompType instanceof PsiPrimitiveType) {
         return lCompType.equals(rCompType);
       }
-      else {
-        return !(rCompType instanceof PsiPrimitiveType) && isAssignable(lCompType, rCompType, allowUncheckedConversion);
-      }
+      return !(rCompType instanceof PsiPrimitiveType) && isAssignable(lCompType, rCompType, allowUncheckedConversion);
     }
 
     if (left instanceof PsiDisjunctionType) {
@@ -828,12 +820,10 @@ public class TypeConversionUtil {
     if (left instanceof PsiPrimitiveType && !PsiType.NULL.equals(left)) {
       return right instanceof PsiClassType && isAssignable(left, right);
     }
-    else {
-      return left instanceof PsiClassType
-                && right instanceof PsiPrimitiveType
-                && !PsiType.NULL.equals(right)
-                && isAssignable(left, right);
-    }
+    return left instanceof PsiClassType
+              && right instanceof PsiPrimitiveType
+              && !PsiType.NULL.equals(right)
+              && isAssignable(left, right);
   }
 
   private static final Key<CachedValue<Set<String>>> POSSIBLE_BOXED_HOLDER_TYPES = Key.create("Types that may be possibly assigned from primitive ones");
@@ -903,9 +893,6 @@ public class TypeConversionUtil {
     PsiSubstitutor leftSubstitutor = leftResult.getSubstitutor();
 
     if (!leftClass.getManager().areElementsEquivalent(leftClass, rightClass)) {
-      if (!allowUncheckedConversion && PsiUtil.isRawSubstitutor(leftClass, leftSubstitutor) && !rightClass.hasTypeParameters() && !(rightClass instanceof PsiTypeParameter)) {
-        return false;
-      }
       rightSubstitutor = getSuperClassSubstitutor(leftClass, rightClass, rightSubstitutor);
       rightClass = leftClass;
     }
@@ -932,7 +919,7 @@ public class TypeConversionUtil {
   }
 
   private static final RecursionGuard ourGuard = RecursionManager.createGuard("isAssignable");
-  
+
   public static boolean typesAgree(PsiType typeLeft, PsiType typeRight, final boolean allowUncheckedConversion) {
     if (typeLeft instanceof PsiWildcardType) {
       final PsiWildcardType leftWildcard = (PsiWildcardType)typeLeft;
@@ -985,7 +972,7 @@ public class TypeConversionUtil {
     }
   }
 
-  private static Boolean containsWildcards(PsiType leftBound) {
+  private static boolean containsWildcards(@NotNull PsiType leftBound) {
     final WildcardDetector wildcardDetector = new WildcardDetector();
     if (leftBound instanceof PsiIntersectionType) {
       for (PsiType conjunctType :((PsiIntersectionType)leftBound).getConjuncts()) {
@@ -993,7 +980,7 @@ public class TypeConversionUtil {
       }
       return true;
     }
-    
+
     return leftBound.accept(wildcardDetector);
   }
 
@@ -1020,9 +1007,6 @@ public class TypeConversionUtil {
    * <code>superClass</code> must be a super class/interface of <code>derivedClass</code> (as in
    * <code>InheritanceUtil.isInheritor(derivedClass, superClass, true)</code>
    *
-   * @param superClass
-   * @param derivedClass
-   * @param derivedSubstitutor
    * @return substitutor (never returns <code>null</code>)
    * @see InheritanceUtil#isInheritor(PsiClass, PsiClass, boolean)
    */
@@ -1216,10 +1200,20 @@ public class TypeConversionUtil {
   public static boolean isPrimitiveWrapper(String typeName) {
     return PRIMITIVE_WRAPPER_TYPES.contains(typeName);
   }
+  @Contract("null -> false")
+  public static boolean isAssignableFromPrimitiveWrapper(final PsiType type) {
+    if (type == null) return false;
+    return isPrimitiveWrapper(type) ||
+           type.equalsToText(CommonClassNames.JAVA_LANG_OBJECT) ||
+           type.equalsToText(CommonClassNames.JAVA_LANG_NUMBER);
+  }
+
+  @Contract("null -> false")
   public static boolean isPrimitiveWrapper(final PsiType type) {
     return type != null && isPrimitiveWrapper(type.getCanonicalText());
   }
 
+  @Contract("null -> false")
   public static boolean isComposite(final PsiType type) {
     return type instanceof PsiDisjunctionType || type instanceof PsiIntersectionType;
   }
@@ -1228,7 +1222,7 @@ public class TypeConversionUtil {
     return typeParameterErasure(typeParameter, PsiSubstitutor.EMPTY);
   }
 
-  private static PsiType typeParameterErasure(@NotNull PsiTypeParameter typeParameter, final PsiSubstitutor beforeSubstitutor) {
+  private static PsiType typeParameterErasure(@NotNull PsiTypeParameter typeParameter, @NotNull PsiSubstitutor beforeSubstitutor) {
     final PsiClassType[] extendsList = typeParameter.getExtendsList().getReferencedTypes();
     if (extendsList.length > 0) {
       final PsiClass psiClass = extendsList[0].resolve();
@@ -1270,11 +1264,13 @@ public class TypeConversionUtil {
     return PsiType.getJavaLangObject(typeParameter.getManager(), typeParameter.getResolveScope());
   }
 
+  @Contract("null -> null")
   public static PsiType erasure(@Nullable PsiType type) {
     return erasure(type, PsiSubstitutor.EMPTY);
   }
 
-  public static PsiType erasure(@Nullable final PsiType type, final PsiSubstitutor beforeSubstitutor) {
+  @Contract("null, _ -> null")
+  public static PsiType erasure(@Nullable final PsiType type, @NotNull final PsiSubstitutor beforeSubstitutor) {
     if (type == null) return null;
     return type.accept(new PsiTypeVisitor<PsiType>() {
       @Override
@@ -1283,9 +1279,7 @@ public class TypeConversionUtil {
         if (aClass instanceof PsiTypeParameter) {
           return typeParameterErasure((PsiTypeParameter)aClass, beforeSubstitutor);
         }
-        else {
-          return classType.rawType();
-        }
+        return classType.rawType();
       }
 
       @Override
@@ -1448,6 +1442,16 @@ public class TypeConversionUtil {
     }
     LOG.error("Unknown token: "+sign);
     return null;
+  }
+
+  // true if floating point literal consists of zeros only
+  public static boolean isFPZero(@NotNull final String text) {
+    for (int i = 0; i < text.length(); i++) {
+      final char c = text.charAt(i);
+      if (Character.isDigit(c) && c != '0') return false;
+      if (Character.toUpperCase(c) == 'E') break;
+    }
+    return true;
   }
 
   private interface Caster {

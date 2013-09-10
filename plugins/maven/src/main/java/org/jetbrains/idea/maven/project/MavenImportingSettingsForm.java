@@ -15,15 +15,15 @@
  */
 package org.jetbrains.idea.maven.project;
 
-import com.intellij.openapi.updateSettings.impl.LabelTextReplacingUtil;
-import com.intellij.ui.ListCellRendererWrapper;
 import com.intellij.ide.util.projectWizard.WizardContext;
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory;
 import com.intellij.openapi.ui.TextFieldWithBrowseButton;
+import com.intellij.openapi.updateSettings.impl.LabelTextReplacingUtil;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.projectImport.ProjectFormatPanel;
 import com.intellij.ui.EnumComboBoxModel;
+import com.intellij.ui.ListCellRendererWrapper;
 
 import javax.swing.*;
 import java.awt.event.ActionEvent;
@@ -50,15 +50,14 @@ public class MavenImportingSettingsForm {
   private JCheckBox myDownloadDocsCheckBox;
 
   private JPanel myAdditionalSettingsPanel;
-  private JPanel mySeparateModulesDirPanel;
   private JComboBox myGeneratedSourcesComboBox;
   private JCheckBox myExcludeTargetFolderCheckBox;
+  private JTextField myDependencyTypes;
 
   public MavenImportingSettingsForm(boolean isImportStep, boolean isCreatingNewProject) {
     mySearchRecursivelyCheckBox.setVisible(isImportStep);
     myProjectFormatLabel.setVisible(isImportStep && isCreatingNewProject);
     myProjectFormatComboBox.setVisible(isImportStep && isCreatingNewProject);
-    mySeparateModulesDirPanel.setVisible(isImportStep);
 
     ActionListener listener = new ActionListener() {
       public void actionPerformed(ActionEvent e) {
@@ -123,6 +122,8 @@ public class MavenImportingSettingsForm {
 
     data.setDownloadSourcesAutomatically(myDownloadSourcesCheckBox.isSelected());
     data.setDownloadDocsAutomatically(myDownloadDocsCheckBox.isSelected());
+
+    data.setDependencyTypes(myDependencyTypes.getText());
   }
 
   public void setData(MavenImportingSettings data) {
@@ -144,6 +145,8 @@ public class MavenImportingSettingsForm {
 
     myDownloadSourcesCheckBox.setSelected(data.isDownloadSourcesAutomatically());
     myDownloadDocsCheckBox.setSelected(data.isDownloadDocsAutomatically());
+
+    myDependencyTypes.setText(data.getDependencyTypes());
 
     updateControls();
   }

@@ -107,6 +107,8 @@ public class FileWatcherTest extends PlatformLangTestCase {
       }
     });
 
+    ((LocalFileSystemImpl)myFileSystem).cleanupForNextTest();
+
     LOG = FileWatcher.getLog();
     LOG.debug("================== setting up " + getName() + " ==================");
   }
@@ -283,6 +285,26 @@ public class FileWatcherTest extends PlatformLangTestCase {
       myAccept = true;
       FileUtil.writeToFile(file, "new content");
       assertEvent(VFileCreateEvent.class, file.getAbsolutePath());
+    }
+    finally {
+      unwatch(request);
+      delete(topDir);
+    }
+  }
+
+  public void testIncorrectPath() throws Exception {
+    File topDir = createTestDir("top");
+    File file = createTestFile(topDir, "file.zip");
+    File subDir = new File(file, "sub/zip");
+    refresh(topDir);
+
+    LocalFileSystem.WatchRequest request = watch(subDir, false);
+    try {
+      myTimeout = 10 * INTER_RESPONSE_DELAY;
+      myAccept = true;
+      FileUtil.writeToFile(file, "new content");
+      assertEvent(VFileEvent.class);
+      myTimeout = NATIVE_PROCESS_DELAY;
     }
     finally {
       unwatch(request);
@@ -491,7 +513,7 @@ public class FileWatcherTest extends PlatformLangTestCase {
       myAccept = true;
       assertTrue(FileUtil.delete(rootDir));
       assertTrue(rootDir.mkdir());
-      if (SystemInfo.isLinux) TimeoutUtil.sleep(1100);  // implementation specific
+      if (SystemInfo.isLinux) TimeoutUtil.sleep(1500);  // implementation specific
       assertTrue(file1.createNewFile());
       assertTrue(file2.createNewFile());
       assertEvent(VFileContentChangeEvent.class, file1.getPath(), file2.getPath());

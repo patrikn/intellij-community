@@ -15,6 +15,7 @@
  */
 package git4idea.update;
 
+import com.intellij.dvcs.DvcsUtil;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -93,7 +94,7 @@ public class GitFetcher {
   }
 
   @NotNull
-  public GitFetchResult fetch(@NotNull VirtualFile root, @NotNull String remoteName) {
+  public GitFetchResult fetch(@NotNull VirtualFile root, @NotNull String remoteName, @Nullable String branch) {
     GitRepository repository = myRepositoryManager.getRepositoryForRoot(root);
     if (repository == null) {
       return logError("Repository can't be null for " + root, myRepositoryManager.toString());
@@ -106,7 +107,7 @@ public class GitFetcher {
     if (url == null) {
       return logError("URL is null for remote " + remote.getName(), null);
     }
-    return fetchRemote(repository, remote, url);
+    return fetchRemote(repository, remote, url, branch);
   }
 
   private static GitFetchResult logError(@NotNull String message, @Nullable String additionalInfo) {
@@ -124,15 +125,18 @@ public class GitFetcher {
 
     GitRemote remote = fetchParams.getRemote();
     String url = fetchParams.getUrl();
-    return fetchRemote(repository, remote, url);
+    return fetchRemote(repository, remote, url, null);
   }
 
   @NotNull
-  private GitFetchResult fetchRemote(@NotNull GitRepository repository, @NotNull GitRemote remote, @NotNull String url) {
+  private GitFetchResult fetchRemote(@NotNull GitRepository repository,
+                                     @NotNull GitRemote remote,
+                                     @NotNull String url,
+                                     @Nullable String branch) {
     if (GitHttpAdapter.shouldUseJGit(url)) {
-      return GitHttpAdapter.fetch(repository, remote, url, null);
+      return GitHttpAdapter.fetch(repository, remote, url, branch);
     }
-    return fetchNatively(repository.getRoot(), remote, url, null);
+    return fetchNatively(repository.getRoot(), remote, url, branch);
   }
 
   // leaving this unused method, because the wanted behavior can change again
@@ -351,7 +355,7 @@ public class GitFetcher {
     StringBuilder info = new StringBuilder();
     if (myRepositoryManager.moreThanOneRoot()) {
       for (Map.Entry<VirtualFile, String> entry : additionalInfo.entrySet()) {
-        info.append(entry.getValue()).append(" in ").append(GitUIUtil.getShortRepositoryName(myProject, entry.getKey())).append("<br/>");
+        info.append(entry.getValue()).append(" in ").append(DvcsUtil.getShortRepositoryName(myProject, entry.getKey())).append("<br/>");
       }
     }
     else {

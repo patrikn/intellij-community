@@ -15,10 +15,10 @@
  */
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
-import com.intellij.codeInsight.CodeInsightUtilBase;
+import com.intellij.codeInsight.CodeInsightUtilCore;
 import com.intellij.codeInsight.ExpectedTypeInfo;
+import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerEx;
 import com.intellij.codeInsight.daemon.QuickFixBundle;
-import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerImpl;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.template.Template;
 import com.intellij.codeInsight.template.TemplateBuilderImpl;
@@ -55,7 +55,7 @@ public class CreateMethodFromUsageFix extends CreateFromUsageBaseFix {
 
   private final SmartPsiElementPointer myMethodCall;
 
-  public CreateMethodFromUsageFix(PsiMethodCallExpression methodCall) {
+  public CreateMethodFromUsageFix(@NotNull PsiMethodCallExpression methodCall) {
     myMethodCall = SmartPointerManager.getInstance(methodCall.getProject()).createSmartPsiElementPointer(methodCall);
   }
 
@@ -94,15 +94,15 @@ public class CreateMethodFromUsageFix extends CreateFromUsageBaseFix {
 
     PsiExpressionList argumentList = call.getArgumentList();
     final TextRange argRange = argumentList.getTextRange();
-    return !DaemonCodeAnalyzerImpl.processHighlights(document, project, HighlightSeverity.ERROR,
-                                                     //strictly inside arg list
-                                                     argRange.getStartOffset()+1,
-                                                     argRange.getEndOffset()-1, new Processor<HighlightInfo>() {
-        @Override
-        public boolean process(HighlightInfo info) {
-          return !(info.getActualStartOffset() > argRange.getStartOffset() && info.getActualEndOffset() < argRange.getEndOffset());
-        }
-      });
+    return !DaemonCodeAnalyzerEx.processHighlights(document, project, HighlightSeverity.ERROR,
+                                                   //strictly inside arg list
+                                                   argRange.getStartOffset() + 1,
+                                                   argRange.getEndOffset() - 1, new Processor<HighlightInfo>() {
+      @Override
+      public boolean process(HighlightInfo info) {
+        return !(info.getActualStartOffset() > argRange.getStartOffset() && info.getActualEndOffset() < argRange.getEndOffset());
+      }
+    });
   }
 
   @Override
@@ -214,7 +214,7 @@ public class CreateMethodFromUsageFix extends CreateFromUsageBaseFix {
                                ExpectedTypeInfo[] expectedTypes,
                                @Nullable final PsiElement context) {
 
-    method = CodeInsightUtilBase.forcePsiPostprocessAndRestoreElement(method);
+    method = CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(method);
 
     if (method == null) {
       return;
@@ -231,7 +231,7 @@ public class CreateMethodFromUsageFix extends CreateFromUsageBaseFix {
       .setupTypeElement(method.getReturnTypeElement(), expectedTypes, substitutor, builder, context, targetClass);
     PsiCodeBlock body = method.getBody();
     builder.setEndVariableAfter(shouldBeAbstract || body == null ? method : body.getLBrace());
-    method = CodeInsightUtilBase.forcePsiPostprocessAndRestoreElement(method);
+    method = CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(method);
     if (method == null) return;
 
     RangeMarker rangeMarker = document.createRangeMarker(method.getTextRange());

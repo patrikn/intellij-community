@@ -46,4 +46,18 @@ public abstract class FrameworkSupportInModuleProvider {
   public boolean canAddSupport(@NotNull Module module, @NotNull FacetsProvider facetsProvider) {
     return !isSupportAlreadyAdded(module, facetsProvider);
   }
+
+  public String getPresentableName() {
+    return getFrameworkType().getPresentableName();
+  }
+
+  @NotNull
+  public String[] getProjectCategories() {
+    return getFrameworkType().getProjectCategories();
+  }
+
+  @Override
+  public String toString() {
+    return getPresentableName();
+  }
 }

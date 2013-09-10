@@ -35,7 +35,6 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.EditorFactory;
 import com.intellij.openapi.editor.event.DocumentListener;
-import com.intellij.openapi.editor.impl.DocumentImpl;
 import com.intellij.openapi.module.EmptyModuleType;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
@@ -148,12 +147,18 @@ public abstract class PlatformTestCase extends UsefulTestCase implements DataPro
     }
     URL resource = PlatformTestCase.class.getClassLoader().getResource("idea/ApplicationInfo.xml");
     if (resource == null) {
-      resource = PlatformTestCase.class.getClassLoader().getResource("idea/IdeaApplicationInfo.xml");
+      resource = PlatformTestCase.class.getClassLoader().getResource("META-INF/UltimateLangXmlPlugin.xml");
       if (resource == null) {
-        setPlatformPrefix("PlatformLangXml");
+        resource = PlatformTestCase.class.getClassLoader().getResource("idea/IdeaApplicationInfo.xml");
+        if (resource == null) {
+          setPlatformPrefix("PlatformLangXml");
+        }
+        else {
+          setPlatformPrefix("Idea");
+        }
       }
       else {
-        setPlatformPrefix("Idea");
+        setPlatformPrefix("UltimateLangXml");
       }
     }
   }
@@ -196,7 +201,6 @@ public abstract class PlatformTestCase extends UsefulTestCase implements DataPro
     }
 
     DocumentCommitThread.getInstance().clearQueue();
-    DocumentImpl.CHECK_DOCUMENT_CONSISTENCY = !isPerformanceTest();
   }
 
   public Project getProject() {
@@ -629,12 +633,18 @@ public abstract class PlatformTestCase extends UsefulTestCase implements DataPro
             runTest();
             myAssertionsInTestDetected = false;
           }
+          catch (Throwable e) {
+            throwables[0] = e;
+            throw e;
+          }
           finally {
             tearDown();
           }
         }
         catch (Throwable throwable) {
-          throwables[0] = throwable;
+          if (throwables[0] == null) {  // report tearDown() problems if only no exceptions thrown from runTest()
+            throwables[0] = throwable;
+          }
         }
         finally {
           ourTestThread = null;

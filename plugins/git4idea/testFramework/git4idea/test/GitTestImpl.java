@@ -23,11 +23,11 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vfs.VirtualFile;
+import git4idea.GitCommit;
 import git4idea.commands.Git;
 import git4idea.commands.GitCommandResult;
 import git4idea.commands.GitImpl;
 import git4idea.commands.GitLineHandlerListener;
-import git4idea.history.browser.GitCommit;
 import git4idea.push.GitPushSpec;
 import git4idea.repo.GitRepository;
 import org.jetbrains.annotations.NotNull;
@@ -186,6 +186,13 @@ public class GitTestImpl implements Git {
   @Override
   public GitCommandResult tip(@NotNull GitRepository repository, @NotNull String branchName) {
     return execute(repository, "rev-list -1 " + branchName);
+  }
+
+  @NotNull
+  @Override
+  public GitCommandResult push(@NotNull GitRepository repository, @NotNull String remote, @NotNull String url, @NotNull String spec,
+                               boolean updateTracking, @NotNull GitLineHandlerListener... listeners) {
+    throw new UnsupportedOperationException();
   }
 
   @NotNull

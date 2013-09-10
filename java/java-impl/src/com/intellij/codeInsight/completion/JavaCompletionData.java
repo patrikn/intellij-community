@@ -21,6 +21,7 @@ import com.intellij.codeInsight.TailTypes;
 import com.intellij.codeInsight.completion.util.ParenthesesInsertHandler;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.LookupItem;
+import com.intellij.codeInsight.lookup.PsiTypeLookupItem;
 import com.intellij.codeInsight.lookup.TailTypeDecorator;
 import com.intellij.patterns.ElementPattern;
 import com.intellij.patterns.PsiJavaElementPattern;
@@ -531,8 +532,19 @@ public class JavaCompletionData extends JavaAwareCompletionData {
     PsiElement prev = PsiTreeUtil.prevVisibleLeaf(position);
     if (prev == null) return false;
 
-    PsiExpression expr = PsiTreeUtil.getParentOfType(prev, PsiExpression.class);
-    return expr != null && expr.getTextRange().getEndOffset() == prev.getTextRange().getEndOffset();
+    PsiElement expr = PsiTreeUtil.getParentOfType(prev, PsiExpression.class);
+    if (expr != null && expr.getTextRange().getEndOffset() == prev.getTextRange().getEndOffset()) {
+      return true;
+    }
+
+    if (position instanceof PsiIdentifier && position.getParent() instanceof PsiLocalVariable) {
+      PsiType type = ((PsiLocalVariable)position.getParent()).getType();
+      if (type instanceof PsiClassType && ((PsiClassType)type).resolve() == null) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   public static boolean isSuitableForClass(PsiElement position) {
@@ -601,6 +613,17 @@ public class JavaCompletionData extends JavaAwareCompletionData {
       return;
     }
 
+    boolean afterNew = psiElement().afterLeaf(
+      psiElement().withText(PsiKeyword.NEW).andNot(psiElement().afterLeaf(PsiKeyword.THROW, "."))).accepts(position);
+    if (afterNew) {
+      PsiElementFactory factory = JavaPsiFacade.getElementFactory(position.getProject());
+      for (String primitiveType : PRIMITIVE_TYPES) {
+        result.addElement(PsiTypeLookupItem.createLookupItem(factory.createTypeFromText(primitiveType + "[]", null), null));
+      }
+      result.addElement(PsiTypeLookupItem.createLookupItem(factory.createTypeFromText("void[]", null), null));
+      return;
+    }
+
     boolean inCast = psiElement()
       .afterLeaf(psiElement().withText("(").withParent(psiElement(PsiParenthesizedExpression.class, PsiTypeCastExpression.class)))
       .accepts(position);
@@ -608,8 +631,6 @@ public class JavaCompletionData extends JavaAwareCompletionData {
     boolean typeFragment = position.getContainingFile() instanceof PsiTypeCodeFragment && PsiTreeUtil.prevVisibleLeaf(position) == null;
     boolean declaration = DECLARATION_START.accepts(position);
     boolean expressionPosition = isExpressionPosition(position);
-    boolean afterNew = psiElement().afterLeaf(
-      psiElement().withText(PsiKeyword.NEW).andNot(psiElement().afterLeaf(PsiKeyword.THROW, "."))).accepts(position);
     boolean inGenerics = PsiTreeUtil.getParentOfType(position, PsiReferenceParameterList.class) != null;
     if (START_FOR.accepts(position) ||
         isInsideParameterList(position) ||
@@ -618,7 +639,6 @@ public class JavaCompletionData extends JavaAwareCompletionData {
         inCast ||
         declaration ||
         typeFragment ||
-        afterNew ||
         expressionPosition ||
         isStatementPosition(position)) {
       for (String primitiveType : PRIMITIVE_TYPES) {

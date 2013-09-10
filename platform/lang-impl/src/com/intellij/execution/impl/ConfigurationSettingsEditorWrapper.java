@@ -50,7 +50,7 @@ public class ConfigurationSettingsEditorWrapper extends SettingsEditor<RunnerAnd
   private JPanel myWholePanel;
 
   private JPanel myBeforeLaunchContainer;
-  private BeforeRunStepsPanel myBeforeRunStepsPanel;
+  private final BeforeRunStepsPanel myBeforeRunStepsPanel;
 
   private final ConfigurationSettingsEditor myEditor;
   private final HideableDecorator myDecorator;
@@ -93,10 +93,6 @@ public class ConfigurationSettingsEditorWrapper extends SettingsEditor<RunnerAnd
     myComponentPlace.add(myEditor.getComponent(), BorderLayout.CENTER);
     DataManager.registerDataProvider(myWholePanel, new TypeSafeDataProviderAdapter(new MyDataProvider()));
     return myWholePanel;
-  }
-
-  @Override
-  protected void disposeEditor() {
   }
 
   @Override

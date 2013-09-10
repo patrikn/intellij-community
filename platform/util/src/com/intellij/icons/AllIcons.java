@@ -136,7 +136,6 @@ public class AllIcons {
     public static final Icon ShowHiddens = IconLoader.getIcon("/actions/showHiddens.png"); // 16x16
     public static final Icon ShowImportStatements = IconLoader.getIcon("/actions/showImportStatements.png"); // 16x16
     public static final Icon ShowReadAccess = IconLoader.getIcon("/actions/showReadAccess.png"); // 16x16
-    public static final Icon ShowSource = IconLoader.getIcon("/actions/showSource.png"); // 16x16
     public static final Icon ShowViewer = IconLoader.getIcon("/actions/showViewer.png"); // 16x16
     public static final Icon ShowWriteAccess = IconLoader.getIcon("/actions/showWriteAccess.png"); // 16x16
     public static final Icon SortAsc = IconLoader.getIcon("/actions/sortAsc.png"); // 9x8
@@ -176,6 +175,7 @@ public class AllIcons {
   
   public static class Css {
     public static final Icon Atrule = IconLoader.getIcon("/css/atrule.png"); // 16x16
+    public static final Icon Import = IconLoader.getIcon("/css/import.png"); // 16x16
     public static final Icon Property = IconLoader.getIcon("/css/property.png"); // 16x16
     public static final Icon Pseudo_element = IconLoader.getIcon("/css/pseudo-element.png"); // 16x16
 
@@ -331,6 +331,7 @@ public class AllIcons {
     public static final Icon JavaScript = IconLoader.getIcon("/fileTypes/javaScript.png"); // 16x16
     public static final Icon Jsp = IconLoader.getIcon("/fileTypes/jsp.png"); // 16x16
     public static final Icon Jspx = IconLoader.getIcon("/fileTypes/jspx.png"); // 16x16
+    public static final Icon Manifest = IconLoader.getIcon("/fileTypes/manifest.png"); // 16x16
     public static final Icon Properties = IconLoader.getIcon("/fileTypes/properties.png"); // 16x16
     public static final Icon Text = IconLoader.getIcon("/fileTypes/text.png"); // 16x16
     public static final Icon TypeScript = IconLoader.getIcon("/fileTypes/typeScript.png"); // 16x16
@@ -877,6 +878,21 @@ public class AllIcons {
     public static final Icon Sorted = IconLoader.getIcon("/objectBrowser/sorted.png"); // 16x16
     public static final Icon SortedByUsage = IconLoader.getIcon("/objectBrowser/sortedByUsage.png"); // 16x16
     public static final Icon VisibilitySort = IconLoader.getIcon("/objectBrowser/visibilitySort.png"); // 16x16
+
+  }
+  
+  public static class Preferences {
+    public static final Icon Appearance = IconLoader.getIcon("/preferences/Appearance.png"); // 32x32
+    public static final Icon CodeStyle = IconLoader.getIcon("/preferences/CodeStyle.png"); // 32x32
+    public static final Icon Compiler = IconLoader.getIcon("/preferences/Compiler.png"); // 32x32
+    public static final Icon Editor = IconLoader.getIcon("/preferences/Editor.png"); // 32x32
+    public static final Icon FileColors = IconLoader.getIcon("/preferences/FileColors.png"); // 32x32
+    public static final Icon FileTypes = IconLoader.getIcon("/preferences/FileTypes.png"); // 32x32
+    public static final Icon General = IconLoader.getIcon("/preferences/General.png"); // 32x32
+    public static final Icon Keymap = IconLoader.getIcon("/preferences/Keymap.png"); // 32x32
+    public static final Icon Plugins = IconLoader.getIcon("/preferences/Plugins.png"); // 32x32
+    public static final Icon Updates = IconLoader.getIcon("/preferences/Updates.png"); // 32x32
+    public static final Icon VersionControl = IconLoader.getIcon("/preferences/VersionControl.png"); // 32x32
 
   }
   

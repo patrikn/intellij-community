@@ -125,7 +125,7 @@ public abstract class BaseAnalysisAction extends AnAction {
   protected void canceled() {
   }
 
-  protected abstract void analyze(@NotNull Project project, AnalysisScope scope);
+  protected abstract void analyze(@NotNull Project project, @NotNull AnalysisScope scope);
 
   @Nullable
   private AnalysisScope getInspectionScope(@NotNull DataContext dataContext) {
@@ -144,7 +144,7 @@ public abstract class BaseAnalysisAction extends AnAction {
       return new AnalysisScope(projectContext);
     }
 
-    final AnalysisScope analysisScope = AnalysisScope.KEY.getData(dataContext);
+    final AnalysisScope analysisScope = AnalysisScopeUtil.KEY.getData(dataContext);
     if (analysisScope != null) {
       return analysisScope;
     }

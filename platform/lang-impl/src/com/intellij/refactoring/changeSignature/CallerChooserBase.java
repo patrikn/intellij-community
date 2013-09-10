@@ -45,6 +45,7 @@ import com.intellij.util.Query;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.HashSet;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import javax.swing.event.TreeSelectionEvent;
@@ -67,7 +68,7 @@ public abstract class CallerChooserBase<M extends PsiElement> extends DialogWrap
   private TreeSelectionListener myTreeSelectionListener;
   private Editor myCallerEditor;
   private Editor myCalleeEditor;
-  private boolean myInitDone;
+  private final boolean myInitDone;
   private final String myFileName;
 
   protected abstract MethodNodeBase<M> createTreeNode(M method, HashSet<M> called, Runnable cancelCallback);
@@ -300,4 +301,9 @@ public abstract class CallerChooserBase<M extends PsiElement> extends DialogWrap
     return myTree;
   }
 
+  @Nullable
+  @Override
+  protected String getDimensionServiceKey() {
+    return "caller.chooser.dialog";
+  }
 }

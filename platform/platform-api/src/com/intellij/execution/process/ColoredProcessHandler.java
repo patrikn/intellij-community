@@ -22,11 +22,9 @@ import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.util.Key;
-import com.intellij.openapi.util.Pair;
 import org.jetbrains.annotations.NotNull;
 
 import java.nio.charset.Charset;
-import java.util.List;
 
 /**
  * @author Roman Chernyatchik
@@ -38,12 +36,8 @@ public class ColoredProcessHandler extends OSProcessHandler implements AnsiEscap
     return EditorColorsManager.getInstance().getGlobalScheme().getAttributes(key);
   }
 
-  // Registering
-  // TODO use new Maia API in ConsoleViewContentType to apply ANSI color changes without
-  // restarting RM / Idea + Ruby Plugin
-
   public ColoredProcessHandler(final GeneralCommandLine commandLine) throws ExecutionException {
-    this(commandLine.createProcess(), commandLine.getCommandLineString(), commandLine.getCharset());
+    super(commandLine.createProcess(), commandLine.getCommandLineString(), commandLine.getCharset());
   }
 
   public ColoredProcessHandler(Process process, String commandLine) {
@@ -56,23 +50,23 @@ public class ColoredProcessHandler extends OSProcessHandler implements AnsiEscap
     super(process, commandLine, charset);
   }
 
+  @Override
   public final void notifyTextAvailable(final String text, final Key outputType) {
     myAnsiEscapeDecoder.escapeText(text, outputType, this);
   }
 
+  @Override
   public void coloredTextAvailable(String text, Key attributes) {
-    textAvailable(text, attributes);
+    super.notifyTextAvailable(text, attributes);
   }
 
   /**
    * @deprecated Inheritors should override coloredTextAvailable method
-   * or implement ColoredChunksAcceptor and override method coloredChunksAvailable to process colored chunks
+   * or implement {@link com.intellij.execution.process.AnsiEscapeDecoder.ColoredChunksAcceptor}
+   * and override method coloredChunksAvailable to process colored chunks.
+   * To be removed in IDEA 14.
    */
   protected void textAvailable(final String text, final Key attributes) {
     super.notifyTextAvailable(text, attributes);
-  }
-
-  public void processColoredChunks(@NotNull final List<Pair<String, Key>> textChunks) {
-    myAnsiEscapeDecoder.coloredTextAvailable(textChunks, this);
   }
 }

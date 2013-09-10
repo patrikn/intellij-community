@@ -15,7 +15,6 @@
  */
 package com.intellij.psi.impl;
 
-import com.intellij.lang.ASTNode;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicatorProvider;
@@ -430,6 +429,7 @@ public class PsiClassImplUtil {
                                                    @Nullable Set<PsiClass> visited,
                                                    PsiElement last,
                                                    @NotNull PsiElement place,
+                                                   @NotNull LanguageLevel languageLevel,
                                                    boolean isRaw) {
     if (last instanceof PsiTypeParameterList || last instanceof PsiModifierList) {
       return true; //TypeParameterList and ModifierList do not see our declarations
@@ -441,7 +441,6 @@ public class PsiClassImplUtil {
 
     ParameterizedCachedValue<MembersMap, PsiClass> cache = getValues(aClass); //aClass.getUserData(MAP_IN_CLASS_KEY);
     boolean upToDate = cache.hasUpToDateValue();
-    LanguageLevel languageLevel = PsiUtil.getLanguageLevel(place);
     if (/*true || */upToDate) {
       final NameHint nameHint = processor.getHint(NameHint.KEY);
       if (nameHint != null) {
@@ -478,6 +477,7 @@ public class PsiClassImplUtil {
 
         final List<Pair<PsiMember, PsiSubstitutor>> list = allFieldsMap.get(name);
         if (list != null) {
+          boolean resolved = false;
           for (final Pair<PsiMember, PsiSubstitutor> candidate : list) {
             PsiMember candidateField = candidate.getFirst();
             PsiClass containingClass = candidateField.getContainingClass();
@@ -489,8 +489,11 @@ public class PsiClassImplUtil {
                                                                      substitutor, factory, languageLevel);
 
             processor.handleEvent(PsiScopeProcessor.Event.SET_DECLARATION_HOLDER, containingClass);
-            if (!processor.execute(candidateField, state.put(PsiSubstitutor.KEY, finalSubstitutor))) return false;
+            if (!processor.execute(candidateField, state.put(PsiSubstitutor.KEY, finalSubstitutor))) {
+              resolved = true;
+            }
           }
+          if (resolved) return false;
         }
       }
     }
@@ -514,6 +517,7 @@ public class PsiClassImplUtil {
 
           List<Pair<PsiMember, PsiSubstitutor>> list = allClassesMap.get(name);
           if (list != null) {
+            boolean resolved = false;
             for (final Pair<PsiMember, PsiSubstitutor> candidate : list) {
               PsiMember inner = candidate.getFirst();
               PsiClass containingClass = inner.getContainingClass();
@@ -521,9 +525,12 @@ public class PsiClassImplUtil {
                 PsiSubstitutor finalSubstitutor = obtainFinalSubstitutor(containingClass, candidate.getSecond(), aClass,
                                                                          substitutor, factory, languageLevel);
                 processor.handleEvent(PsiScopeProcessor.Event.SET_DECLARATION_HOLDER, containingClass);
-                if (!processor.execute(inner, state.put(PsiSubstitutor.KEY, finalSubstitutor))) return false;
+                if (!processor.execute(inner, state.put(PsiSubstitutor.KEY, finalSubstitutor))) {
+                  resolved = true;
+                }
               }
             }
+            if (resolved) return false;
           }
         }
       }
@@ -543,6 +550,7 @@ public class PsiClassImplUtil {
       Map<String, List<Pair<PsiMember, PsiSubstitutor>>> allMethodsMap = value.get(MemberType.METHOD);
       List<Pair<PsiMember, PsiSubstitutor>> list = allMethodsMap.get(name);
       if (list != null) {
+        boolean resolved = false;
         for (final Pair<PsiMember, PsiSubstitutor> candidate : list) {
           ProgressIndicatorProvider.checkCanceled();
           PsiMethod candidateMethod = (PsiMethod)candidate.getFirst();
@@ -558,8 +566,11 @@ public class PsiClassImplUtil {
                                                                    substitutor, factory, languageLevel);
           finalSubstitutor = checkRaw(isRaw, factory, candidateMethod, finalSubstitutor);
           processor.handleEvent(PsiScopeProcessor.Event.SET_DECLARATION_HOLDER, containingClass);
-          if (!processor.execute(candidateMethod, state.put(PsiSubstitutor.KEY, finalSubstitutor))) return false;
+          if (!processor.execute(candidateMethod, state.put(PsiSubstitutor.KEY, finalSubstitutor))) {
+            resolved = true;
+          }
         }
+        if (resolved) return false;
 
         if (visited != null) {
           for (Pair<PsiMember, PsiSubstitutor> aList : list) {
@@ -681,7 +692,7 @@ public class PsiClassImplUtil {
       if (superClass == null) continue;
       PsiSubstitutor finalSubstitutor = obtainFinalSubstitutor(superClass, superTypeResolveResult.getSubstitutor(), aClass,
                                                                state.get(PsiSubstitutor.KEY), factory, languageLevel);
-      if (!processDeclarationsInClass(superClass, processor, state.put(PsiSubstitutor.KEY, finalSubstitutor), visited, last, place, isRaw)) {
+      if (!processDeclarationsInClass(superClass, processor, state.put(PsiSubstitutor.KEY, finalSubstitutor), visited, last, place, languageLevel, isRaw)) {
         resolved = true;
       }
     }
@@ -1029,14 +1040,8 @@ public class PsiClassImplUtil {
   @NotNull
   private static PsiElement originalElement(@NotNull PsiClass aClass) {
     final PsiElement originalElement = aClass.getOriginalElement();
-    ASTNode node = originalElement.getNode();
-    if (node != null) {
-      final PsiCompiledElement compiled = node.getUserData(ClsElementImpl.COMPILED_ELEMENT);
-      if (compiled != null) {
-        return compiled;
-      }
-    }
-    return originalElement;
+    final PsiCompiledElement compiled = originalElement.getUserData(ClsElementImpl.COMPILED_ELEMENT);
+    return compiled != null ? compiled : originalElement;
   }
 
   public static boolean isFieldEquivalentTo(@NotNull PsiField field, PsiElement another) {

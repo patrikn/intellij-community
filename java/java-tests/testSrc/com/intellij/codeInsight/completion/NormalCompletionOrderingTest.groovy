@@ -36,6 +36,10 @@ public class NormalCompletionOrderingTest extends CompletionSortingTestCase {
     checkPreferredItems(0, "return", "register");
   }
 
+  public void testDelegatingConstructorCall() {
+    checkPreferredItems 0, 'element', 'equals'
+  }
+
   public void testPreferAnnotationMethods() throws Throwable {
     checkPreferredItems(0, "name", "value", "Foo", "Anno");
   }
@@ -60,7 +64,7 @@ public class NormalCompletionOrderingTest extends CompletionSortingTestCase {
     final LookupImpl lookup = invokeCompletion(getTestName(false) + ".html");
     assertPreferredItems(0, "p", "param", "pre");
     incUseCount(lookup, 2);
-    assertPreferredItems(0, "p", "pre", "param");
+    assertPreferredItems(1, "p", "pre", "param");
   }
 
   public void testUppercaseMatters2() throws Throwable {
@@ -98,11 +102,11 @@ public class NormalCompletionOrderingTest extends CompletionSortingTestCase {
   }
 
   public void testDispreferDeclared() throws Throwable {
-    checkPreferredItems(0, "aabbb", "aaa", "Aaaaaaa");
+    checkPreferredItems(0, "aabbb", "aaa");
   }
 
   public void testDispreferDeclaredOfExpectedType() throws Throwable {
-    checkPreferredItems(0, "aabbb", "aaa", "Aaaaaaa");
+    checkPreferredItems(0, "aabbb", "aaa");
   }
 
   public void testDispreferImpls() throws Throwable {
@@ -257,7 +261,7 @@ public class NormalCompletionOrderingTest extends CompletionSortingTestCase {
   }
 
   public void testPreferInterfacesInImplements() {
-    checkPreferredItems(0, "FooIntf", "FooClass");
+    checkPreferredItems(0, "XFooIntf", "XFoo", "XFooClass");
   }
 
   public void testPreferClassesInExtends() {
@@ -394,11 +398,14 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Target;
 
 @Target({ElementType.TYPE})
-@interface TClassAnno {}
+@interface TxClassAnno {}
+
+interface TxANotAnno {}
 
 @Target({ElementType.METHOD})
-@interface TMethodAnno {}'''
-    checkPreferredItems 0, 'TMethodAnno', 'TClassAnno'
+@interface TxMethodAnno {}'''
+    checkPreferredItems 0, 'TxMethodAnno', 'TxClassAnno'
+    assert !('TxANotAnno' in myFixture.lookupElementStrings)
   }
 
   public void testJComponentAddNewWithStats() throws Throwable {
@@ -441,14 +448,11 @@ import java.lang.annotation.Target;
   }
 
   public void testChangePreselectionOnSecondInvocation() {
-    myFixture.addClass('package foo; public class FooZoo { }')
-    myFixture.addClass('public class FooZooImpl { }')
-    myFixture.addClass('public class FooZooGoo {}')
     configureNoCompletion(getTestName(false) + ".java");
     myFixture.complete(CompletionType.BASIC);
-    assertPreferredItems(0, 'FooZooGoo', 'FooZooImpl');
+    assertPreferredItems(0, 'fooZooGoo', 'fooZooImpl');
     myFixture.complete(CompletionType.BASIC);
-    assertPreferredItems(0, 'FooZoo', 'FooZooGoo', 'FooZooImpl');
+    assertPreferredItems(0, 'fooZoo', 'fooZooGoo', 'fooZooImpl');
   }
 
   public void testUnderscoresDontMakeMatchMiddle() {
@@ -594,14 +598,6 @@ import java.lang.annotation.Target;
     myFixture.completeBasic()
     myFixture.type('set')
     assertPreferredItems 0, 'setText', 'setOurText'
-  }
-
-  public void testEnumConstantStartMatching() {
-    checkPreferredItems(0, 'rMethod', 'Zoo.RIGHT')
-    myFixture.type('i\n;\nreturn r')
-    myFixture.completeBasic()
-    assertPreferredItems 0, 'Zoo.RIGHT', 'rMethod'
-
   }
 
 }

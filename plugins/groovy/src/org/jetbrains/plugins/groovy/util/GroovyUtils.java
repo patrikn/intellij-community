@@ -21,6 +21,9 @@ import com.intellij.openapi.application.PluginPathManager;
 import com.intellij.openapi.module.JavaModuleType;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleType;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiManager;
 import com.intellij.util.PathUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -72,6 +75,27 @@ public abstract class GroovyUtils {
 
   public static boolean isAcceptableModuleType(ModuleType type) {
     return type instanceof JavaModuleType || PLUGIN_MODULE_ID.equals(type.getId()) || "ANDROID_MODULE".equals(type.getId());
+  }
+
+  @Nullable
+  public static GrTypeDefinition getPublicClass(@Nullable VirtualFile virtualFile, PsiManager manager) {
+    if (virtualFile == null) return null;
+
+    PsiFile psiFile = manager.findFile(virtualFile);
+    if ((psiFile instanceof GroovyFile)) {
+      return getClassDefinition((GroovyFile)psiFile);
+    }
+
+    return null;
+  }
+
+  @Nullable
+  public static GrTypeDefinition getClassDefinition(@NotNull GroovyFile groovyFile) {
+    String fileName = groovyFile.getName();
+    int idx = fileName.lastIndexOf('.');
+    if (idx < 0) return null;
+
+    return getClassDefinition(groovyFile, fileName.substring(0, idx));
   }
 
   @Nullable

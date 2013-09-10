@@ -76,13 +76,17 @@ public class StringConcatenationArgumentToLogCallInspection extends BaseInspecti
 
   private static class StringConcatenationArgumentToLogCallFix extends InspectionGadgetsFix {
 
-
     public StringConcatenationArgumentToLogCallFix() {}
 
     @NotNull
     @Override
     public String getName() {
-      return InspectionGadgetsBundle.message("string.concatenation.in.format.call.quickfix");
+      return InspectionGadgetsBundle.message("string.concatenation.argument.to.log.call.quickfix");
+    }
+    @Override
+    @NotNull
+    public String getFamilyName() {
+      return getName();
     }
 
     @Override

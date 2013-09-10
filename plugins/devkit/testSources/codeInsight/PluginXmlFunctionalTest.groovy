@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ package org.jetbrains.idea.devkit.codeInsight
 import com.intellij.codeInsight.TargetElementUtilBase
 import com.intellij.codeInsight.completion.CompletionType
 import com.intellij.codeInspection.LocalInspectionTool
+import com.intellij.codeInspection.deadCode.UnusedDeclarationInspection
+import com.intellij.codeInspection.unusedSymbol.UnusedSymbolLocalInspection
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.PluginPathManager
 import com.intellij.psi.ElementDescriptionUtil
@@ -29,6 +31,7 @@ import com.intellij.usageView.UsageViewNodeTextLocation
 import com.intellij.usageView.UsageViewTypeLocation
 import com.intellij.util.xml.DeprecatedClassUsageInspection
 import org.jetbrains.idea.devkit.inspections.*
+
 /**
  * @author peter
  */
@@ -68,9 +71,12 @@ public class PluginXmlFunctionalTest extends JavaCodeInsightFixtureTestCase {
                            "        <extensionPoint name=\"custom\"/>\n" +
                            "    </extensionPoints>\n" +
                            "</idea-plugin>");
+    myFixture.addClass("package foo; public class MyRunnable implements java.lang.Runnable {}");
+    myFixture.addClass("package foo; @Deprecated public abstract class MyDeprecatedEP {}");
+    myFixture.addClass("package foo; public class MyDeprecatedEPImpl extends foo.MyDeprecatedEP {}");
 
     configureByFile();
-    myFixture.checkHighlighting(false, false, false);
+    myFixture.checkHighlighting(true, false, false);
   }
 
   public void testDependsHighlighting() throws Throwable {
@@ -87,11 +93,34 @@ public class PluginXmlFunctionalTest extends JavaCodeInsightFixtureTestCase {
     myFixture.checkHighlighting(false, false, false);
   }
 
+  public void testDependsCompletion() throws Throwable {
+    addPluginXml("platform", "<idea-plugin>\n" +
+                             "    <id>com.intellij</id>\n" +
+                             "    <module value=\"com.intellij.modules.vcs\"/>\n" +
+                             "</idea-plugin>");
+    addPluginXml("lang", "<idea-plugin>\n" +
+                         "    <id>com.intellij</id>\n" +
+                         "    <module value=\"com.intellij.modules.lang\"/>\n" +
+                         "    <module value=\"com.intellij.modules.lang.another\"/>\n" +
+                         "</idea-plugin>");
+    addPluginXml("custom", "<idea-plugin>\n" +
+                           "    <id>com.intellij.custom</id>\n" +
+                           "</idea-plugin>");
+    configureByFile();
+
+    myFixture.completeBasic()
+    assertSameElements(myFixture.lookupElementStrings,
+                       'com.intellij.modules.vcs',
+                       'com.intellij.modules.lang', 'com.intellij.modules.lang.another',
+                       'com.intellij.custom')
+  }
+
   private void configureByFile() {
     myFixture.configureFromExistingVirtualFile(myFixture.copyFileToProject(getTestName(false) + ".xml", "META-INF/plugin.xml"));
   }
 
   public void testExtensionQualifiedName() throws Throwable {
+    myFixture.addClass("package foo; public class MyRunnable implements java.lang.Runnable {}");
     configureByFile();
     myFixture.checkHighlighting(false, false, false);
   }
@@ -194,6 +223,24 @@ public class PluginXmlFunctionalTest extends JavaCodeInsightFixtureTestCase {
   public void testLoadForDefaultProject() throws Exception {
     configureByFile();
     myFixture.testHighlighting(true, true, true);
+  }
+
+  public void testImplicitUsagesDomElement() {
+    myFixture.addClass("package com.intellij.util.xml; public interface DomElement {}")
+    myFixture.addClass("package com.intellij.util.xml; public interface GenericAttributeValue<T> extends DomElement {}")
+
+    myFixture.enableInspections(new UnusedSymbolLocalInspection(), new UnusedDeclarationInspection())
+    myFixture.configureByFile("ImplicitUsagesDomElement.java")
+    myFixture.testHighlighting()
+  }
+
+  public void testImplicitUsagesDomElementVisitor() {
+    myFixture.addClass("package com.intellij.util.xml; public interface DomElement {}")
+    myFixture.addClass("package com.intellij.util.xml; public interface DomElementVisitor {}")
+
+    myFixture.enableInspections(new UnusedSymbolLocalInspection(), new UnusedDeclarationInspection())
+    myFixture.configureByFile("ImplicitUsagesDomElementVisitor.java")
+    myFixture.testHighlighting()
   }
 
   static Collection<Class<? extends LocalInspectionTool>> getInspectionClasses() {

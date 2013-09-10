@@ -62,7 +62,6 @@ import com.intellij.openapi.util.*;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.LocalFileSystem;
-import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.*;
 import com.intellij.openapi.wm.ex.ToolWindowEx;
@@ -325,8 +324,8 @@ public class ProjectViewImpl extends ProjectView implements PersistentStateCompo
   }
 
   private class ChangeViewAction extends AnAction {
-    private String myId;
-    private String mySubId;
+    private final String myId;
+    private final String mySubId;
 
     private ChangeViewAction(String id, String subId) {
       myId = id;
@@ -356,7 +355,7 @@ public class ProjectViewImpl extends ProjectView implements PersistentStateCompo
     SelectInTarget selectInTarget = pane.createSelectInTarget();
     if (selectInTarget != null) {
       mySelectInTargets.put(pane.getId(), selectInTarget);
-    }                                   
+    }
     if (isInitialized) {
       doAddUninitializedPanes();
     }
@@ -395,17 +394,36 @@ public class ProjectViewImpl extends ProjectView implements PersistentStateCompo
         content.setSeparator("");
       }
     }
+
+    String selectID = null;
+    String selectSubID = null;
+
+    // try to find saved selected view...
     for (Content content : contents) {
       final String id = content.getUserData(ID_KEY);
       final String subId = content.getUserData(SUB_ID_KEY);
-      if (id != null && id.equals(mySavedPaneId) &&
-          StringUtil.equals(subId, content.getUserData(SUB_ID_KEY))) {
-        changeView(mySavedPaneId, mySavedPaneSubId);
-        mySavedPaneId = null;
-        mySavedPaneSubId = null;
+      if (id != null &&
+          id.equals(mySavedPaneId) &&
+          StringUtil.equals(subId, mySavedPaneSubId)) {
+        selectID = id;
+        selectSubID = subId;
         break;
       }
     }
+
+    // saved view not found (plugin disabled, ID changed etc.) - select first available view...
+    if (selectID == null && contents.length > 0) {
+      Content content = contents[0];
+      selectID = content.getUserData(ID_KEY);
+      selectSubID = content.getUserData(SUB_ID_KEY);
+    }
+
+    if (selectID != null) {
+      changeView(selectID, selectSubID);
+      mySavedPaneId = null;
+      mySavedPaneSubId = null;
+    }
+
     myUninitializedPanes.clear();
   }
 
@@ -679,7 +697,7 @@ public class ProjectViewImpl extends ProjectView implements PersistentStateCompo
       }).setAsSecondary(true);
     }
 
-    if (!PlatformUtils.isAppCode()) {
+    if (!PlatformUtils.isCidr()) {
       myActionGroup.addAction(new PaneOptionAction(myShowMembers, IdeBundle.message("action.show.members"),
                                                    IdeBundle.message("action.show.hide.members"),
                                                    AllIcons.ObjectBrowser.ShowMembers, ourShowMembersDefaults))
@@ -915,7 +933,7 @@ public class ProjectViewImpl extends ProjectView implements PersistentStateCompo
       for (PsiElement psiElement : allElements) {
         if (psiElement != null && psiElement.isValid()) validElements.add(psiElement);
       }
-      final PsiElement[] elements = PsiUtilBase.toPsiElementArray(validElements);
+      final PsiElement[] elements = PsiUtilCore.toPsiElementArray(validElements);
 
       LocalHistoryAction a = LocalHistory.getInstance().startAction(IdeBundle.message("progress.deleting"));
       try {
@@ -1000,7 +1018,7 @@ public class ProjectViewImpl extends ProjectView implements PersistentStateCompo
         final Object paneSpecificData = currentProjectViewPane.getData(dataId);
         if (paneSpecificData != null) return paneSpecificData;
       }
-      
+
       if (LangDataKeys.PSI_ELEMENT.is(dataId)) {
         if (currentProjectViewPane == null) return null;
         final PsiElement[] elements = currentProjectViewPane.getSelectedPSIElements();
@@ -1012,18 +1030,6 @@ public class ProjectViewImpl extends ProjectView implements PersistentStateCompo
         }
         PsiElement[] elements = currentProjectViewPane.getSelectedPSIElements();
         return elements.length == 0 ? null : elements;
-      }
-      if (PlatformDataKeys.VIRTUAL_FILE_ARRAY.is(dataId)) {
-        PsiElement[] psiElements = (PsiElement[])getData(LangDataKeys.PSI_ELEMENT_ARRAY.getName());
-        if (psiElements == null) return null;
-        Set<VirtualFile> files = new LinkedHashSet<VirtualFile>();
-        for (PsiElement element : psiElements) {
-          final VirtualFile virtualFile = PsiUtilCore.getVirtualFile(element);
-          if (virtualFile != null) {
-            files.add(virtualFile);
-          }
-        }
-        return files.size() > 0 ? VfsUtil.toVirtualFileArray(files) : null;
       }
       if (LangDataKeys.MODULE.is(dataId)) {
         VirtualFile[] virtualFiles = (VirtualFile[])getData(PlatformDataKeys.VIRTUAL_FILE_ARRAY.getName());

@@ -226,6 +226,20 @@ public abstract class MvcFramework {
 
   public abstract String getUserLibraryName();
 
+  @Nullable
+  protected VirtualFile findCoreJar(@Nullable Module module) {
+    if (module == null) return null;
+
+    JavaPsiFacade javaFacade = JavaPsiFacade.getInstance(module.getProject());
+    PsiClass aClass = javaFacade.findClass(getSomeFrameworkClass(), GlobalSearchScope.moduleWithLibrariesScope(module));
+    if (aClass == null) return null;
+
+    VirtualFile virtualFile = aClass.getContainingFile().getVirtualFile();
+    if (virtualFile == null || !(virtualFile.getFileSystem() instanceof JarFileSystem)) return null;
+
+    return PathUtil.getLocalFile(virtualFile);
+  }
+
   protected List<File> getImplicitClasspathRoots(@NotNull Module module) {
     final List<File> toExclude = new ArrayList<File>();
 
@@ -324,7 +338,7 @@ public abstract class MvcFramework {
 
   protected static void ensureRunConfigurationExists(Module module, ConfigurationType configurationType, String name) {
     final RunManagerEx runManager = RunManagerEx.getInstanceEx(module.getProject());
-    for (final RunConfiguration runConfiguration : runManager.getConfigurations(configurationType)) {
+    for (final RunConfiguration runConfiguration : runManager.getConfigurationsList(configurationType)) {
       if (runConfiguration instanceof MvcRunConfiguration && ((MvcRunConfiguration)runConfiguration).getModule() == module) {
         return;
       }
@@ -419,8 +433,12 @@ public abstract class MvcFramework {
     return CommandLineBuilder.createFromJavaParameters(params);
   }
 
-  private void extractPlugins(Project project, @Nullable VirtualFile pluginRoot, Map<String, VirtualFile> res) {
+  private void extractPlugins(Project project, @Nullable VirtualFile pluginRoot, boolean refreshPluginRoot, Map<String, VirtualFile> res) {
     if (pluginRoot != null) {
+      if (refreshPluginRoot) {
+        pluginRoot.refresh(false, false);
+      }
+
       VirtualFile[] children = pluginRoot.getChildren();
       if (children != null) {
         for (VirtualFile child : children) {
@@ -450,9 +468,9 @@ public abstract class MvcFramework {
       VirtualFile root = findAppRoot(module);
       if (root == null) return;
 
-      extractPlugins(module.getProject(), root.findChild(MvcModuleStructureUtil.PLUGINS_DIRECTORY), result);
-      extractPlugins(module.getProject(), MvcModuleStructureUtil.findFile(getCommonPluginsDir(module), refresh), result);
-      extractPlugins(module.getProject(), MvcModuleStructureUtil.findFile(getGlobalPluginsDir(module), refresh), result);
+      extractPlugins(module.getProject(), root.findChild(MvcModuleStructureUtil.PLUGINS_DIRECTORY), false, result);
+      extractPlugins(module.getProject(), MvcModuleStructureUtil.findFile(getCommonPluginsDir(module), refresh), refresh, result);
+      extractPlugins(module.getProject(), MvcModuleStructureUtil.findFile(getGlobalPluginsDir(module), refresh), refresh, result);
     }
   }
 

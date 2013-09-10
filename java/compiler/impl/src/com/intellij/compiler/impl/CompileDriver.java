@@ -27,12 +27,17 @@ import com.intellij.compiler.make.CacheCorruptedException;
 import com.intellij.compiler.make.CacheUtils;
 import com.intellij.compiler.make.ChangedConstantsDependencyProcessor;
 import com.intellij.compiler.make.DependencyCache;
+import com.intellij.compiler.options.CompilerConfigurable;
 import com.intellij.compiler.progress.CompilerTask;
 import com.intellij.compiler.server.BuildManager;
 import com.intellij.compiler.server.CustomBuilderMessageHandler;
 import com.intellij.compiler.server.DefaultMessageHandler;
 import com.intellij.diagnostic.IdeErrorsDialog;
 import com.intellij.diagnostic.PluginException;
+import com.intellij.notification.Notification;
+import com.intellij.notification.NotificationListener;
+import com.intellij.notification.NotificationType;
+import com.intellij.notification.Notifications;
 import com.intellij.openapi.application.*;
 import com.intellij.openapi.compiler.*;
 import com.intellij.openapi.compiler.Compiler;
@@ -48,6 +53,7 @@ import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.module.LanguageLevelUtil;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
+import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
@@ -64,6 +70,7 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.*;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.registry.Registry;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.*;
 import com.intellij.openapi.vfs.newvfs.ManagingFS;
 import com.intellij.openapi.vfs.newvfs.RefreshQueue;
@@ -99,9 +106,10 @@ import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.jps.api.CmdlineProtoUtil;
 import org.jetbrains.jps.api.CmdlineRemoteProto;
 import org.jetbrains.jps.api.RequestFuture;
-import org.jetbrains.jps.incremental.Utils;
+import org.jetbrains.jps.model.java.JavaSourceRootType;
 
 import javax.swing.*;
+import javax.swing.event.HyperlinkEvent;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -639,14 +647,14 @@ public class CompileDriver {
 
     final String contentName =
       forceCompile ? CompilerBundle.message("compiler.content.name.compile") : CompilerBundle.message("compiler.content.name.make");
-    final CompilerTask compileTask = new CompilerTask(myProject, contentName, ApplicationManager.getApplication().isUnitTestMode(), true, true,
-                                                      isCompilationStartedAutomatically(scope));
+    final boolean isUnitTestMode = ApplicationManager.getApplication().isUnitTestMode();
+    final CompilerTask compileTask = new CompilerTask(myProject, contentName, isUnitTestMode, true, true, isCompilationStartedAutomatically(scope));
 
     StatusBar.Info.set("", myProject, "Compiler");
     if (useExtProcessBuild) {
       // ensure the project model seen by build process is up-to-date
       myProject.save();
-      if (!ApplicationManager.getApplication().isUnitTestMode()) {
+      if (!isUnitTestMode) {
         ApplicationManager.getApplication().saveSettings();
       }
     }
@@ -743,6 +751,12 @@ public class CompileDriver {
             if (message != null) {
               compileContext.addMessage(message);
             }
+            else {
+              if (!isUnitTestMode) {
+                notifyDeprecatedImplementation();
+              }
+            }
+            
             TranslatingCompilerFilesMonitor.getInstance().ensureInitializationCompleted(myProject, compileContext.getProgressIndicator());
             doCompile(compileContext, isRebuild, forceCompile, callback, checkCachesVersion);
           }
@@ -768,6 +782,25 @@ public class CompileDriver {
         startup(scope, isRebuild, forceCompile, callback, message, checkCachesVersion);
       }
     });
+  }
+
+  private void notifyDeprecatedImplementation() {
+    final NotificationListener hyperlinkHandler = new NotificationListener.Adapter() {
+      @Override
+      protected void hyperlinkActivated(@NotNull Notification notification, @NotNull HyperlinkEvent e) {
+        notification.expire();
+        if (!myProject.isDisposed()) {
+          ShowSettingsUtil.getInstance().editConfigurable(myProject, new CompilerConfigurable(myProject));
+        }
+      }
+    };
+    final Notification notification = new Notification(
+      "Compile", "Deprecated make implementation",
+      "Old implementation of \"Make\" feature is enabled for this project.<br>It has been deprecated and will be removed soon.<br>Please enable newer 'external build' feature in <a href=\"#\">Settings | Compiler</a>.",
+      NotificationType.WARNING, 
+      hyperlinkHandler
+    );
+    Notifications.Bus.notify(notification, myProject);
   }
 
   @Nullable @TestOnly
@@ -951,7 +984,7 @@ public class CompileDriver {
       else {
         message = CompilerBundle.message("status.compilation.completed.successfully.with.warnings.and.errors", errorCount, warningCount);
       }
-      message = message + " in " + Utils.formatDuration(duration);
+      message = message + " in " + StringUtil.formatDuration(duration);
     }
     return message;
   }
@@ -1959,8 +1992,7 @@ public class CompileDriver {
     finally {
       CompilerUtil.refreshIOFiles(filesToRefresh);
       if (!generatedFiles.isEmpty()) {
-        DumbService.getInstance(myProject).waitForSmartMode();
-        List<VirtualFile> vFiles = ApplicationManager.getApplication().runReadAction(new Computable<List<VirtualFile>>() {
+        List<VirtualFile> vFiles = DumbService.getInstance(myProject).runReadActionInSmartMode(new Computable<List<VirtualFile>>() {
           public List<VirtualFile> compute() {
             final ArrayList<VirtualFile> vFiles = new ArrayList<VirtualFile>(generatedFiles.size());
             for (File generatedFile : generatedFiles) {
@@ -2162,8 +2194,7 @@ public class CompileDriver {
     final List<FileProcessingCompiler.ProcessingItem> toProcess = new ArrayList<FileProcessingCompiler.ProcessingItem>();
     final Set<String> allUrls = new HashSet<String>();
     final IOException[] ex = {null};
-    DumbService.getInstance(myProject).waitForSmartMode();
-    ApplicationManager.getApplication().runReadAction(new Runnable() {
+    DumbService.getInstance(myProject).runReadActionInSmartMode(new Runnable() {
       public void run() {
         try {
           for (FileProcessingCompiler.ProcessingItem item : items) {
@@ -2357,8 +2388,8 @@ public class CompileDriver {
         if (!compilerManager.isValidationEnabled(module)) {
           continue;
         }
-        final boolean hasSources = hasSources(module, false);
-        final boolean hasTestSources = hasSources(module, true);
+        final boolean hasSources = hasSources(module, JavaSourceRootType.SOURCE);
+        final boolean hasTestSources = hasSources(module, JavaSourceRootType.TEST_SOURCE);
         if (!hasSources && !hasTestSources) {
           // If module contains no sources, shouldn't have to select JDK or output directory (SCR #19333)
           // todo still there may be problems with this approach if some generated files are attributed by this module
@@ -2589,27 +2620,8 @@ public class CompileDriver {
     }
   }
 
-  private static boolean hasSources(Module module, boolean checkTestSources) {
-    final ContentEntry[] contentEntries = ModuleRootManager.getInstance(module).getContentEntries();
-    for (final ContentEntry contentEntry : contentEntries) {
-      final SourceFolder[] sourceFolders = contentEntry.getSourceFolders();
-      for (final SourceFolder sourceFolder : sourceFolders) {
-        if (sourceFolder.getFile() == null) {
-          continue; // skip invalid source folders
-        }
-        if (checkTestSources) {
-          if (sourceFolder.isTestSource()) {
-            return true;
-          }
-        }
-        else {
-          if (!sourceFolder.isTestSource()) {
-            return true;
-          }
-        }
-      }
-    }
-    return false;
+  private static boolean hasSources(Module module, final JavaSourceRootType rootType) {
+    return !ModuleRootManager.getInstance(module).getSourceRoots(rootType).isEmpty();
   }
 
   private void showNotSpecifiedError(@NonNls final String resourceId, List<String> modules, String editorNameToSelect) {

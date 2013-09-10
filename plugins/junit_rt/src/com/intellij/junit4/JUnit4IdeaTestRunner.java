@@ -15,10 +15,7 @@
  */
 package com.intellij.junit4;
 
-import com.intellij.rt.execution.junit.IDEAJUnitListener;
-import com.intellij.rt.execution.junit.IdeaTestRunner;
-import com.intellij.rt.execution.junit.TimeSender;
-import com.intellij.rt.execution.junit.TreeSender;
+import com.intellij.rt.execution.junit.*;
 import com.intellij.rt.execution.junit.segments.OutputObjectRegistry;
 import com.intellij.rt.execution.junit.segments.SegmentedOutputStream;
 import org.junit.internal.requests.ClassRequest;
@@ -50,7 +47,7 @@ public class JUnit4IdeaTestRunner implements IdeaTestRunner {
       else if (request instanceof FilterRequest) {
         description = getFilteredDescription(request, description);
       }
-      if (sendTree) TreeSender.sendTree(this, description);
+      TreeSender.sendTree(this, description, sendTree);
     }
     catch (Exception e) {
       //noinspection HardCodedStringLiteral
@@ -140,8 +137,12 @@ public class JUnit4IdeaTestRunner implements IdeaTestRunner {
 
 
   public void setStreams(SegmentedOutputStream segmentedOut, SegmentedOutputStream segmentedErr, int lastIdx) {
-    myRegistry = new JUnit4OutputObjectRegistry(segmentedOut, lastIdx);
-    myTestsListener = new JUnit4TestResultsSender(myRegistry);
+    if (JUnitStarter.SM_RUNNER) {
+      myTestsListener = new SMTestSender();
+    } else {
+      myRegistry = new JUnit4OutputObjectRegistry(segmentedOut, lastIdx);
+      myTestsListener = new JUnit4TestResultsSender(myRegistry);
+    }
   }
 
   public Object getTestToStart(String[] args) {
@@ -172,6 +173,10 @@ public class JUnit4IdeaTestRunner implements IdeaTestRunner {
 
   public OutputObjectRegistry getRegistry() {
     return myRegistry;
+  }
+
+  public String getTestClassName(Object child) {
+    return ((Description)child).getClassName();
   }
 
   public String getStartDescription(Object child) {

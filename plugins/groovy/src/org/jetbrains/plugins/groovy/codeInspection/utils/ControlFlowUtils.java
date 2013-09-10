@@ -615,7 +615,7 @@ public class ControlFlowUtils {
   }
 
   public static Set<GrExpression> getAllReturnValues(@NotNull final GrControlFlowOwner block) {
-    return CachedValuesManager.getManager(block.getProject()).getCachedValue(block, new CachedValueProvider<Set<GrExpression>>() {
+    return CachedValuesManager.getCachedValue(block, new CachedValueProvider<Set<GrExpression>>() {
       @Override
       public Result<Set<GrExpression>> compute() {
         final Set<GrExpression> result = new HashSet<GrExpression>();
@@ -691,17 +691,15 @@ public class ControlFlowUtils {
 
   @Nullable
   public static GrControlFlowOwner findControlFlowOwner(PsiElement place) {
-    if (place instanceof GrCodeBlock) {
-      place = place.getContext();
-    }
-    while (true) {
-      assert place != null;
-      place = place.getContext();
-      if (place == null) return null;
+    place = place.getContext();
+    while (place != null) {
       if (place instanceof GrControlFlowOwner && ((GrControlFlowOwner)place).isTopControlFlowOwner()) return (GrControlFlowOwner)place;
       if (place instanceof GrMethod) return ((GrMethod)place).getBlock();
       if (place instanceof GrClassInitializer) return ((GrClassInitializer)place).getBlock();
+
+      place = place.getContext();
     }
+    return null;
   }
 
   /**

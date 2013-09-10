@@ -114,14 +114,16 @@ public class ScopeViewPane extends AbstractProjectViewPane {
 
   @Override
   public JComponent createComponent() {
-    myViewPanel = new ScopeTreeViewPanel(myProject);
-    Disposer.register(this, myViewPanel);
-    myViewPanel.initListeners();
-    myViewPanel.selectScope(NamedScopesHolder.getScope(myProject, getSubId()));
-    myTree = myViewPanel.getTree();
-    PopupHandler.installPopupHandler(myTree, IdeActions.GROUP_SCOPE_VIEW_POPUP, ActionPlaces.SCOPE_VIEW_POPUP);
-    enableDnD();
+    if (myViewPanel == null) {
+      myViewPanel = new ScopeTreeViewPanel(myProject);
+      Disposer.register(this, myViewPanel);
+      myViewPanel.initListeners();
+      myTree = myViewPanel.getTree();
+      PopupHandler.installPopupHandler(myTree, IdeActions.GROUP_SCOPE_VIEW_POPUP, ActionPlaces.SCOPE_VIEW_POPUP);
+      enableDnD();
+    }
 
+    myViewPanel.selectScope(NamedScopesHolder.getScope(myProject, getSubId()));
     return myViewPanel.getPanel();
   }
 
@@ -136,15 +138,21 @@ public class ScopeViewPane extends AbstractProjectViewPane {
   @Override
   @NotNull
   public String[] getSubIds() {
-    NamedScope[] scopes = myDependencyValidationManager.getScopes();
-    scopes = ArrayUtil.mergeArrays(scopes, myNamedScopeManager.getScopes());
-    scopes = NonProjectFilesScope.removeFromList(scopes);
+    NamedScope[] scopes = getShownScopes();
     String[] ids = new String[scopes.length];
     for (int i = 0; i < scopes.length; i++) {
       final NamedScope scope = scopes[i];
       ids[i] = scope.getName();
     }
     return ids;
+  }
+
+  private NamedScope[] getShownScopes() {
+    NamedScope[] scopes = myDependencyValidationManager.getScopes();
+    scopes = ArrayUtil.mergeArrays(scopes, myNamedScopeManager.getScopes());
+    scopes = NonProjectFilesScope.removeFromList(scopes);
+    scopes = ArrayUtil.remove(scopes, CustomScopesProviderEx.getAllScope());
+    return scopes;
   }
 
   @Override
@@ -180,15 +188,13 @@ public class ScopeViewPane extends AbstractProjectViewPane {
     if (psiFile == null) return;
     if (!(element instanceof PsiElement)) return;
 
-    List<NamedScope> allScopes = new ArrayList<NamedScope>();
-    ContainerUtil.addAll(allScopes, myDependencyValidationManager.getScopes());
-    ContainerUtil.addAll(allScopes, myNamedScopeManager.getScopes());
-    for (int i = 0; i < allScopes.size(); i++) {
-      final NamedScope scope = allScopes.get(i);
+    NamedScope[] allScopes = getShownScopes();
+    for (int i = 0; i < allScopes.length; i++) {
+      final NamedScope scope = allScopes[i];
       String name = scope.getName();
       if (name.equals(getSubId())) {
-        allScopes.set(i, allScopes.get(0));
-        allScopes.set(0, scope);
+        allScopes[i] = allScopes[0];
+        allScopes[0] = scope;
         break;
       }
     }
@@ -203,7 +209,7 @@ public class ScopeViewPane extends AbstractProjectViewPane {
 
   private boolean changeView(final PackageSet packageSet, final PsiElement element, final PsiFileSystemItem psiFileSystemItem, final String name, final NamedScopesHolder holder,
                              boolean requestFocus) {
-    if ((packageSet instanceof PackageSetBase && ((PackageSetBase)packageSet).contains(psiFileSystemItem.getVirtualFile(), holder)) ||
+    if ((packageSet instanceof PackageSetBase && ((PackageSetBase)packageSet).contains(psiFileSystemItem.getVirtualFile(), myProject, holder)) ||
         (psiFileSystemItem instanceof PsiFile && packageSet.contains((PsiFile)psiFileSystemItem, holder))) {
       if (!name.equals(getSubId())) {
         myProjectView.changeView(getId(), name);

@@ -6,7 +6,6 @@ import com.intellij.openapi.util.Comparing;
 import com.intellij.tasks.Comment;
 import com.intellij.tasks.Task;
 import com.intellij.tasks.TaskRepositoryType;
-import com.intellij.tasks.actions.TaskSearchSupport;
 import com.intellij.tasks.impl.BaseRepository;
 import com.intellij.tasks.impl.BaseRepositoryImpl;
 import com.intellij.tasks.mantis.model.*;
@@ -85,8 +84,7 @@ public class MantisRepository extends BaseRepositoryImpl {
     while (true) {
       cancelled.checkCanceled();
       final List<Task> issuesFromPage = getIssues(page, issuesOnPage, soap);
-      final List<Task> filteredTasks = TaskSearchSupport.filterTasks(query != null ? query : "", issuesFromPage);
-      tasks.addAll(filteredTasks);
+      tasks.addAll(issuesFromPage);
       if (issuesFromPage.size() < issuesOnPage || tasks.size() >= max) {
         break;
       }
@@ -153,7 +151,9 @@ public class MantisRepository extends BaseRepositoryImpl {
       @NotNull
       @Override
       public Comment[] getComments() {
-        final List<Comment> comments = ContainerUtil.map(data.getNotes(), new Function<IssueNoteData, Comment>() {
+        IssueNoteData[] notes = data.getNotes();
+        if (notes == null) return Comment.EMPTY_ARRAY;
+        final List<Comment> comments = ContainerUtil.map(notes, new Function<IssueNoteData, Comment>() {
           @Override
           public Comment fun(final IssueNoteData data) {
             return new Comment() {
@@ -215,12 +215,12 @@ public class MantisRepository extends BaseRepositoryImpl {
     final MantisConnectPortType soap = createSoap();
     myProjects = new ArrayList<MantisProject>();
     ProjectData[] projectDatas = soap.mc_projects_get_user_accessible(getUsername(), getPassword());
-    List<MantisProject> projects = ContainerUtil.map(projectDatas, new Function<ProjectData, MantisProject>() {
+    List<MantisProject> projects = new ArrayList<MantisProject>(ContainerUtil.map(projectDatas, new Function<ProjectData, MantisProject>() {
       @Override
       public MantisProject fun(final ProjectData data) {
         return new MantisProject(data.getId().intValue(), data.getName());
       }
-    });
+    }));
     if (allProjectsAvailable(soap)){
       projects.add(0, MantisProject.ALL_PROJECTS);
     }
@@ -272,5 +272,10 @@ public class MantisRepository extends BaseRepositoryImpl {
     return super.equals(o) &&
            Comparing.equal(getProject(), ((MantisRepository)o).getProject()) &&
            Comparing.equal(getFilter(), ((MantisRepository)o).getFilter());
+  }
+
+  @Override
+  protected int getFeatures() {
+    return super.getFeatures() & ~NATIVE_SEARCH;
   }
 }

@@ -806,7 +806,7 @@ public final class PropertyInspectorTable extends Table implements DataProvider{
         for(IntrospectedProperty otherProperty: props) {
           if (otherProperty.getName().equals(property.getName())) {
             otherValue = otherProperty.getValue(mySelection.get(i));
-            break;            
+            break;
           }
         }
       }
@@ -1028,7 +1028,7 @@ public final class PropertyInspectorTable extends Table implements DataProvider{
         background = table.getBackground();
       }
       else {
-        // syntetic property 
+        // syntetic property
         background = parent == null ? SYNTETIC_PROPERTY_BACKGROUND : SYNTETIC_SUBPROPERTY_BACKGROUND;
       }
 
@@ -1131,7 +1131,7 @@ public final class PropertyInspectorTable extends Table implements DataProvider{
         Map<HighlightSeverity, SimpleTextAttributes> cache = modified ? myModifiedHighlightAttributes : myHighlightAttributes;
         result = cache.get(severity);
         if (result == null) {
-          final TextAttributesKey attrKey = SeverityRegistrar.getInstance(myProject).getHighlightInfoTypeBySeverity(severity).getAttributesKey();
+          final TextAttributesKey attrKey = SeverityRegistrar.getSeverityRegistrar(myProject).getHighlightInfoTypeBySeverity(severity).getAttributesKey();
           TextAttributes textAttrs = EditorColorsManager.getInstance().getGlobalScheme().getAttributes(attrKey);
           if (modified) {
             textAttrs = textAttrs.clone();

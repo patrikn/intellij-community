@@ -26,6 +26,7 @@ import com.intellij.openapi.options.ex.ProjectConfigurablesGroup;
 import com.intellij.openapi.options.ex.SingleConfigurableEditor;
 import com.intellij.openapi.options.newEditor.OptionsEditor;
 import com.intellij.openapi.options.newEditor.OptionsEditorDialog;
+import com.intellij.openapi.options.newEditor.PreferencesDialog;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.util.registry.Registry;
@@ -46,6 +47,7 @@ public class ShowSettingsUtilImpl extends ShowSettingsUtil {
   private static final Logger LOG = Logger.getInstance("#com.intellij.ide.actions.ShowSettingsUtilImpl");
   private AtomicBoolean myShown = new AtomicBoolean(false);
 
+  @Override
   public void showSettingsDialog(Project project, ConfigurableGroup[] group) {
     try {
       myShown.set(true);
@@ -61,13 +63,18 @@ public class ShowSettingsUtilImpl extends ShowSettingsUtil {
 
   private static void _showSettingsDialog(final Project project, ConfigurableGroup[] group, @Nullable Configurable toSelect) {
     group = filterEmptyGroups(group);
-    if (Registry.is("ide.mac.modalDialogsOnFullscreen")) {
+    if (Registry.is("ide.perProjectModality")) {
       new OptionsEditorDialog(project, group, toSelect, true).show();
     } else {
-      new OptionsEditorDialog(project, group, toSelect).show();
+      if (Registry.is("ide.new.preferences")) {
+        new PreferencesDialog(project, group).show();
+      } else {
+        new OptionsEditorDialog(project, group, toSelect).show();
+      }
     }
   }
 
+  @Override
   public void showSettingsDialog(@Nullable final Project project, final Class configurableClass) {
     assert Configurable.class.isAssignableFrom(configurableClass) : "Not a configurable: " + configurableClass.getName();
 
@@ -92,6 +99,7 @@ public class ShowSettingsUtilImpl extends ShowSettingsUtil {
     return null;
   }
 
+  @Override
   public void showSettingsDialog(@Nullable final Project project, @NotNull final String nameToSelect) {
     ConfigurableGroup[] group;
     if (project == null) {
@@ -105,7 +113,7 @@ public class ShowSettingsUtilImpl extends ShowSettingsUtil {
     group = filterEmptyGroups(group);
 
     OptionsEditorDialog dialog;
-    if (Registry.is("ide.mac.modalDialogsOnFullscreen")) {
+    if (Registry.is("ide.perProjectModality")) {
       dialog = new OptionsEditorDialog(actualProject, group, nameToSelect, true);
     } else {
       dialog = new OptionsEditorDialog(actualProject, group, nameToSelect);
@@ -129,7 +137,7 @@ public class ShowSettingsUtilImpl extends ShowSettingsUtil {
     final Configurable configurable2Select = findConfigurable2Select(id2Select, group);
 
     final OptionsEditorDialog dialog;
-    if (Registry.is("ide.mac.modalDialogsOnFullscreen")) {
+    if (Registry.is("ide.perProjectModality")) {
       dialog = new OptionsEditorDialog(actualProject, group, configurable2Select, true);
     } else {
       dialog = new OptionsEditorDialog(actualProject, group, configurable2Select);
@@ -171,6 +179,7 @@ public class ShowSettingsUtilImpl extends ShowSettingsUtil {
     return null;
   }
 
+  @Override
   public void showSettingsDialog(@NotNull final Project project, final Configurable toSelect) {
     _showSettingsDialog(project, new ConfigurableGroup[]{
       new ProjectConfigurablesGroup(project),
@@ -188,30 +197,37 @@ public class ShowSettingsUtilImpl extends ShowSettingsUtil {
     return groups.toArray(new ConfigurableGroup[groups.size()]);
   }
 
+  @Override
   public boolean editConfigurable(Project project, Configurable configurable) {
     return editConfigurable(project, createDimensionKey(configurable), configurable);
   }
 
+  @Override
   public <T extends Configurable> T findApplicationConfigurable(final Class<T> confClass) {
     return ConfigurableExtensionPointUtil.findApplicationConfigurable(confClass);
   }
 
+  @Override
   public <T extends Configurable> T findProjectConfigurable(final Project project, final Class<T> confClass) {
     return ConfigurableExtensionPointUtil.findProjectConfigurable(project, confClass);
   }
 
+  @Override
   public boolean editConfigurable(Project project, String dimensionServiceKey, @NotNull Configurable configurable) {
     return editConfigurable(null, project, configurable, dimensionServiceKey, null);
   }
 
+  @Override
   public boolean editConfigurable(Project project, Configurable configurable, Runnable advancedInitialization) {
     return editConfigurable(null, project, configurable, createDimensionKey(configurable), advancedInitialization);
   }
 
+  @Override
   public boolean editConfigurable(Component parent, Configurable configurable) {
     return editConfigurable(parent, configurable, null);
   }
 
+  @Override
   public boolean editConfigurable(final Component parent, final Configurable configurable, @Nullable final Runnable advancedInitialization) {
     return editConfigurable(parent, null, configurable, createDimensionKey(configurable), advancedInitialization);
   }
@@ -243,6 +259,7 @@ public class ShowSettingsUtilImpl extends ShowSettingsUtil {
     return "#" + displayName;
   }
 
+  @Override
   public boolean editConfigurable(Component parent, String dimensionServiceKey,Configurable configurable) {
     return editConfigurable(parent, null, configurable, dimensionServiceKey, null);
   }

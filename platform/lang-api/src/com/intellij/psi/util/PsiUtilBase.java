@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2011 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,6 +34,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.AsyncResult;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VFileProperty;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileSystem;
 import com.intellij.psi.*;
@@ -45,7 +46,6 @@ import javax.swing.*;
 import java.util.*;
 
 public class PsiUtilBase extends PsiUtilCore {
-
   public static final PsiParser NULL_PARSER = new PsiParser() {
     @Override
     @NotNull
@@ -116,25 +116,6 @@ public class PsiUtilBase extends PsiUtilCore {
     return host != null && isUnderPsiRoot(root, host);
   }
 
-  /**
-   * @deprecated use CompletionUtil#getOriginalElement where appropriate instead
-   */
-  @Nullable
-  public static <T extends PsiElement> T getOriginalElement(@NotNull T psiElement, final Class<? extends T> elementClass) {
-    final PsiFile psiFile = psiElement.getContainingFile();
-    final PsiFile originalFile = psiFile.getOriginalFile();
-    if (originalFile == psiFile) return psiElement;
-    final TextRange range = psiElement.getTextRange();
-    final PsiElement element = originalFile.findElementAt(range.getStartOffset());
-    final int maxLength = range.getLength();
-    T parent = PsiTreeUtil.getParentOfType(element, elementClass, false);
-    for (T next = parent ;
-         next != null && next.getTextLength() <= maxLength;
-         parent = next, next = PsiTreeUtil.getParentOfType(next, elementClass, true)) {
-    }
-    return parent;
-  }
-
   @Nullable
   public static Language getLanguageInEditor(@NotNull final Editor editor, @NotNull final Project project) {
     PsiFile file = PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
@@ -165,15 +146,6 @@ public class PsiUtilBase extends PsiUtilCore {
     if (project == null) return null;
     PsiFile file = PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
     return file == null ? null : file.findElementAt(editor.getCaretModel().getOffset());
-  }
-
-  public static Language getDialect(@NotNull PsiElement element) {
-    return narrowLanguage(element.getLanguage(), element.getContainingFile().getLanguage());
-  }
-
-  private static Language narrowLanguage(final Language language, final Language candidate) {
-    if (candidate.isKindOf(language)) return candidate;
-    return language;
   }
 
   @Nullable
@@ -314,6 +286,17 @@ public class PsiUtilBase extends PsiUtilCore {
 
   public static boolean isSymLink(@NotNull final PsiFileSystemItem element) {
     final VirtualFile virtualFile = element.getVirtualFile();
-    return virtualFile != null && virtualFile.isSymLink();
+    return virtualFile != null && virtualFile.is(VFileProperty.SYMLINK);
+  }
+
+  @Nullable
+  public static VirtualFile asVirtualFile(@Nullable PsiElement element) {
+    if (element instanceof PsiFileSystemItem) {
+      PsiFileSystemItem psiFileSystemItem = (PsiFileSystemItem)element;
+      return psiFileSystemItem.isValid() ? psiFileSystemItem.getVirtualFile() : null;
+    }
+    else {
+      return null;
+    }
   }
 }

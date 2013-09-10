@@ -27,7 +27,6 @@ import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.codeStyle.arrangement.Rearranger;
-import com.intellij.util.ui.OptionsDialog;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -88,8 +87,10 @@ public class LayoutCodeDialog extends DialogWrapper {
     }
 
     myCbIncludeSubdirs.setSelected(true);
+    //Loading previous state
     myCbOptimizeImports.setSelected(PropertiesComponent.getInstance().getBoolean(LayoutCodeConstants.OPTIMIZE_IMPORTS_KEY, false));
     myCbArrangeEntries.setSelected(PropertiesComponent.getInstance().getBoolean(LayoutCodeConstants.REARRANGE_ENTRIES_KEY, false));
+    myCbOnlyVcsChangedRegions.setSelected(PropertiesComponent.getInstance().getBoolean(LayoutCodeConstants.PROCESS_CHANGED_TEXT_KEY, false));
 
     ItemListener listener = new ItemListener() {
       @Override
@@ -108,20 +109,14 @@ public class LayoutCodeDialog extends DialogWrapper {
   private void updateState() {
     myCbIncludeSubdirs.setEnabled(myRbDirectory.isSelected());
     myCbOptimizeImports.setEnabled(
-      !myRbSelectedText.isSelected() &&
-      !(myFile != null && LanguageImportStatements.INSTANCE.forFile(myFile).isEmpty() && myRbFile.isSelected())
+      !myRbSelectedText.isSelected()
+      && !(myFile != null && LanguageImportStatements.INSTANCE.forFile(myFile).isEmpty() && myRbFile.isSelected())
     );
-    myCbArrangeEntries.setEnabled(myRbFile.isSelected()
-                                  && myFile != null
+    myCbArrangeEntries.setEnabled(myFile != null
                                   && Rearranger.EXTENSION.forLanguage(myFile.getLanguage()) != null
     );
 
-    final boolean canTargetVcsChanges = canTargetVcsRegions();
-    myCbOnlyVcsChangedRegions.setEnabled(canTargetVcsChanges);
-    myCbOnlyVcsChangedRegions.setSelected(
-      canTargetVcsChanges && PropertiesComponent.getInstance().getBoolean(LayoutCodeConstants.PROCESS_CHANGED_TEXT_KEY, false)
-    );
-
+    myCbOnlyVcsChangedRegions.setEnabled(canTargetVcsRegions());
     myDoNotAskMeCheckBox.setEnabled(!myRbDirectory.isSelected());
     myRbDirectory.setEnabled(!myDoNotAskMeCheckBox.isSelected());
   }
@@ -206,7 +201,7 @@ public class LayoutCodeDialog extends DialogWrapper {
         updateState();
       }
     });
-    return OptionsDialog.addDoNotShowCheckBox(southPanel, myDoNotAskMeCheckBox);
+    return DialogWrapper.addDoNotShowCheckBox(southPanel, myDoNotAskMeCheckBox);
   }
 
   @NotNull
@@ -260,9 +255,10 @@ public class LayoutCodeDialog extends DialogWrapper {
   @Override
   protected void doOKAction() {
     super.doOKAction();
-    PropertiesComponent.getInstance().setValue(LayoutCodeConstants.OPTIMIZE_IMPORTS_KEY, Boolean.toString(isOptimizeImports()));
-    PropertiesComponent.getInstance().setValue(LayoutCodeConstants.REARRANGE_ENTRIES_KEY, Boolean.toString(isRearrangeEntries()));
-    PropertiesComponent.getInstance().setValue(LayoutCodeConstants.PROCESS_CHANGED_TEXT_KEY, Boolean.toString(isProcessOnlyChangedText()));
+    //Saving checkboxes state
+    PropertiesComponent.getInstance().setValue(LayoutCodeConstants.OPTIMIZE_IMPORTS_KEY, Boolean.toString(myCbOptimizeImports.isSelected()));
+    PropertiesComponent.getInstance().setValue(LayoutCodeConstants.REARRANGE_ENTRIES_KEY, Boolean.toString(myCbArrangeEntries.isSelected()));
+    PropertiesComponent.getInstance().setValue(LayoutCodeConstants.PROCESS_CHANGED_TEXT_KEY, Boolean.toString(myCbOnlyVcsChangedRegions.isSelected()));
   }
 
   private boolean canTargetVcsRegions() {

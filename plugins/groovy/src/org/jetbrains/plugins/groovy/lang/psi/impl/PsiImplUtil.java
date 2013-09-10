@@ -71,6 +71,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMe
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrReflectedMethod;
 import org.jetbrains.plugins.groovy.lang.psi.api.types.GrTypeElement;
 import org.jetbrains.plugins.groovy.lang.psi.api.util.GrNamedArgumentsOwner;
+import org.jetbrains.plugins.groovy.lang.psi.api.util.GrStatementOwner;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.arithmetic.GrAdditiveExpressionImpl;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.arithmetic.GrMultiplicativeExpressionImpl;
@@ -84,6 +85,7 @@ import org.jetbrains.plugins.groovy.lang.psi.util.GrStringUtil;
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -158,18 +160,19 @@ public class PsiImplUtil {
         return GrStringUtil.replaceStringInjectionByLiteral((GrStringInjection)oldParent, (GrLiteral)newExpr);
       }
       else {
-        newExpr = factory.createExpressionFromText("{" + newExpr.getText() + "}");
-        oldParent.getNode().replaceChild(oldExpr.getNode(), newExpr.getNode());
-        return newExpr;
+        GrClosableBlock block = factory.createClosureFromText("{foo}");
+        oldParent.getNode().replaceChild(oldExpr.getNode(), block.getNode());
+        GrStatement[] statements = block.getStatements();
+        return ((GrExpression)statements[0]).replaceWithExpression(newExpr, removeUnnecessaryParentheses);
       }
     }
     
     if (PsiTreeUtil.getParentOfType(oldExpr, GrStringInjection.class, false, GrCodeBlock.class) != null) {
-      final PsiElement replaced = oldExpr.replace(newExpr);
-      final GrStringInjection stringInjection = PsiTreeUtil.getParentOfType(replaced, GrStringInjection.class);
+      final GrStringInjection stringInjection = PsiTreeUtil.getParentOfType(oldExpr, GrStringInjection.class);
       GrStringUtil.wrapInjection(stringInjection);
       assert stringInjection != null;
-      return stringInjection.getClosableBlock();
+      final PsiElement replaced = oldExpr.replaceWithExpression(newExpr, removeUnnecessaryParentheses);
+      return (GrExpression)replaced;
     }
     
     //check priorities    
@@ -798,6 +801,29 @@ public class PsiImplUtil {
       final GrMethod method = (GrMethod)parent;
       if (method.isConstructor()) return null;
       return method.getReturnType();
+    }
+
+    return null;
+  }
+
+  public static GrStatement[] getStatements(final GrStatementOwner statementOwner) {
+    List<GrStatement> result = new ArrayList<GrStatement>();
+    for (PsiElement cur = statementOwner.getFirstChild(); cur != null; cur = cur.getNextSibling()) {
+      if (cur instanceof GrStatement) {
+        result.add((GrStatement)cur);
+      }
+    }
+    return result.toArray(new GrStatement[result.size()]);
+  }
+
+  public static GrNamedArgument findNamedArgument(final GrNamedArgumentsOwner namedArgumentOwner,
+                                                  String label) {
+    for (PsiElement cur = namedArgumentOwner.getFirstChild(); cur != null; cur = cur.getNextSibling()) {
+      if (cur instanceof GrNamedArgument) {
+        if (label.equals(((GrNamedArgument)cur).getLabelName())) {
+          return (GrNamedArgument)cur;
+        }
+      }
     }
 
     return null;

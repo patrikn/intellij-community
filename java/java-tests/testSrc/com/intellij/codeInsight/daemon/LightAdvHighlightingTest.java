@@ -39,8 +39,6 @@ import com.intellij.openapi.extensions.ExtensionPoint;
 import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.openapi.projectRoots.JavaSdkVersion;
-import com.intellij.openapi.projectRoots.JavaVersionService;
-import com.intellij.openapi.projectRoots.JavaVersionServiceImpl;
 import com.intellij.openapi.roots.LanguageLevelProjectExtension;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -50,6 +48,7 @@ import com.intellij.psi.xml.XmlAttribute;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.psi.xml.XmlToken;
 import com.intellij.psi.xml.XmlTokenType;
+import com.intellij.testFramework.IdeaTestUtil;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -119,6 +118,7 @@ public class LightAdvHighlightingTest extends LightDaemonAnalyzerTestCase {
   public void testFieldDoubleInitialization() { doTest(false, false); }
   public void testAssignToFinal() { doTest(false, false); }
   public void testUnhandledExceptionsInSuperclass() { doTest(false, false); }
+  public void testNoUnhandledExceptionsMultipleInheritance() { doTest(false, false); }
   public void testAssignmentCompatible () { doTest(false, false); }
   public void testMustBeBoolean() { doTest(false, false); }
 
@@ -142,7 +142,7 @@ public class LightAdvHighlightingTest extends LightDaemonAnalyzerTestCase {
   public void testCatchType() { doTest(false, false); }
   public void testMustBeThrowable() { doTest(false, false); }
   public void testUnhandledMessingWithFinally() { doTest(false, false); }
-  public void testSerializableStuff() { doTest(true, false); }
+  public void testSerializableStuff() { enableInspectionTool(new UnusedDeclarationInspection()); doTest(true, false); }
   public void testDeprecated() { doTest(true, false); }
   public void testJavadoc() { enableInspectionTool(new JavaDocLocalInspection()); doTest(true, false); }
   public void testExpressionsInSwitch () { doTest(false, false); }
@@ -184,8 +184,8 @@ public class LightAdvHighlightingTest extends LightDaemonAnalyzerTestCase {
   public void testUnused() { doTest(true, false); }
   public void testQualifierBeforeClassName() { doTest(false, false); }
   public void testQualifiedSuper() {
-    ((JavaVersionServiceImpl)JavaVersionService.getInstance()).setTestVersion(JavaSdkVersion.JDK_1_6, myTestRootDisposable);
-    doTest(false, false); 
+    IdeaTestUtil.setTestVersion(JavaSdkVersion.JDK_1_6, getModule(), myTestRootDisposable);
+    doTest(false, false);
   }
 
   public void testIgnoreImplicitThisReferenceBeforeSuperSinceJdk7() throws Exception {

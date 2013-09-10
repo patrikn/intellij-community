@@ -138,7 +138,10 @@
     <extensionPoint name="welcomeFrameProvider" interface="com.intellij.openapi.wm.WelcomeFrameProvider"/>
     <extensionPoint name="frameEditorComponentProvider" interface="com.intellij.openapi.wm.ex.FrameEditorComponentProvider"/>
 
-    <extensionPoint name="statisticsService" interface="com.intellij.internal.statistic.connect.StatisticsService"/>
+    <extensionPoint name="statisticsService" beanClass="com.intellij.internal.statistic.connect.StatisticsServiceEP">
+      <with attribute="implementationClass" implements="com.intellij.internal.statistic.connect.StatisticsService"/>
+    </extensionPoint>
+
     <extensionPoint name="productivityFeaturesProvider" interface="com.intellij.featureStatistics.ProductivityFeaturesProvider"/>
 
     <extensionPoint name="fileIconProvider" interface="com.intellij.ide.FileIconProvider"/>
@@ -184,10 +187,14 @@
     <extensionPoint name="projectAttachProcessor" interface="com.intellij.projectImport.ProjectAttachProcessor"/>
 
     <extensionPoint name="pathMacroFilter" interface="com.intellij.openapi.application.PathMacroFilter"/>
-    <extensionPoint name="pathMacroExpendableProtocol" beanClass="com.intellij.application.options.PathMacroExpendableProtocolBean"/>
+    <extensionPoint name="pathMacroExpandableProtocol" beanClass="com.intellij.application.options.PathMacroExpandableProtocolBean"/>
 
     <extensionPoint name="httpRequestHandler" interface="org.jetbrains.ide.HttpRequestHandler"/>
+    <extensionPoint name="binaryRequestHandler" interface="org.jetbrains.ide.BinaryRequestHandler"/>
+    <extensionPoint name="customPortServerManager" interface="org.jetbrains.ide.CustomPortServerManager"/>
 
     <extensionPoint name="colorPickerListenerFactory" interface="com.intellij.ui.ColorPickerListenerFactory"/>
+
+    <extensionPoint name="search.topHitProvider" interface="com.intellij.ide.SearchTopHitProvider"/>
   </extensionPoints>
 </idea-plugin>

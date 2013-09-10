@@ -15,31 +15,41 @@
  */
 package git4idea.test;
 
-import com.intellij.openapi.application.PluginPathManager;
-import com.intellij.openapi.command.WriteCommandAction;
+import com.intellij.notification.Notification;
+import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Ref;
-import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.openapi.vfs.CharsetToolkit;
+import com.intellij.openapi.vcs.ProjectLevelVcsManager;
+import com.intellij.openapi.vcs.impl.ProjectLevelVcsManagerImpl;
+import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
+import git4idea.GitUtil;
+import git4idea.GitVcs;
+import git4idea.Notificator;
+import git4idea.repo.GitRepository;
+import junit.framework.Assert;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.ide.BuiltInServerManagerImpl;
 
 import java.io.File;
-import java.io.FilenameFilter;
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.testng.Assert.assertNotNull;
-import static org.testng.Assert.fail;
+import static com.intellij.dvcs.test.Executor.cd;
+import static com.intellij.dvcs.test.Executor.touch;
+import static com.intellij.dvcs.test.TestRepositoryUtil.createDir;
+import static com.intellij.dvcs.test.TestRepositoryUtil.createFile;
+import static git4idea.test.GitExecutor.git;
+import static junit.framework.Assert.assertNotNull;
+import static junit.framework.Assert.assertNull;
 
 /**
  * @author Kirill Likhodedov
  */
 public class GitTestUtil {
+
+  private static final String USER_NAME = "John Doe";
+  private static final String USER_EMAIL = "John.Doe@example.com";
 
   /**
    * <p>Creates file structure for given paths. Path element should be a relative (from project root)
@@ -70,160 +80,58 @@ public class GitTestUtil {
     return result;
   }
 
-  // TODO: option - create via IDEA or via java.io. In latter case no need in Project parameter.
-  public static VirtualFile createFile(Project project, final VirtualFile parent, final String name, @Nullable final String content) {
-    final Ref<VirtualFile> result = new Ref<VirtualFile>();
-    new WriteCommandAction.Simple(project) {
-      @Override
-      protected void run() throws Throwable {
-        try {
-          VirtualFile file = parent.createChildData(this, name);
-          if (content != null) {
-            file.setBinaryContent(CharsetToolkit.getUtf8Bytes(content));
-          }
-          result.set(file);
-        }
-        catch (IOException e) {
-          throw new RuntimeException(e);
-        }
-      }
-    }.execute();
-    return result.get();
+  /**
+   * Init, set up username and make initial commit.
+   *
+   * @param repoRoot
+   */
+  public static void initRepo(@NotNull String repoRoot) {
+    cd(repoRoot);
+    git("init");
+    setupUsername();
+    touch("initial.txt");
+    git("add initial.txt");
+    git("commit -m initial");
+  }
+
+  public static void setupUsername() {
+    git("config user.name " + USER_NAME);
+    git("config user.email " + USER_EMAIL);
   }
 
   /**
-   * TODO: option - create via IDEA or via java.io. In latter case no need in Project parameter.
-   * Creates directory inside a write action and returns the resulting reference to it.
-   * If the directory already exists, does nothing.
-   * @param parent Parent directory.
-   * @param name   Name of the directory.
-   * @return reference to the created or already existing directory.
+   * Creates a Git repository in the given root directory;
+   * registers it in the Settings;
+   * return the {@link GitRepository} object for this newly created repository.
    */
-  public static VirtualFile createDir(Project project, final VirtualFile parent, final String name) {
-    final Ref<VirtualFile> result = new Ref<VirtualFile>();
-    new WriteCommandAction.Simple(project) {
-      @Override
-      protected void run() throws Throwable {
-        try {
-          VirtualFile dir = parent.findChild(name);
-          if (dir == null) {
-            dir = parent.createChildDirectory(this, name);
-          }
-          result.set(dir);
-        }
-        catch (IOException e) {
-          throw new RuntimeException(e);
-        }
-      }
-    }.execute();
-    return result.get();
-  }
-
-  /**
-   * Testng compares by iterating over 2 collections, but it won't work for sets which may have different order.
-   */
-  public static <T> void assertEqualCollections(@NotNull Collection<T> actual, @NotNull Collection<T> expected) {
-    if (actual.size() != expected.size()) {
-      fail("Collections don't have the same size. " + stringifyActualExpected(actual, expected));
-    }
-    for (T act : actual) {
-      if (!expected.contains(act)) {
-        fail("Unexpected object " + act + stringifyActualExpected(actual, expected));
-      }
-    }
-    // backwards is needed for collections which may contain duplicates, e.g. Lists.
-    for (T exp : expected) {
-      if (!actual.contains(exp)) {
-        fail("Object " + exp + " not found in actual collection." + stringifyActualExpected(actual, expected));
-      }
-    }
-  }
-
-  /**
-   * Testng compares by iterating over 2 collections, but it won't work for sets which may have different order.
-   */
-  public static <T, E> void assertEqualCollections(@NotNull Collection<T> actual, @NotNull Collection<E> expected, @NotNull EqualityChecker<T, E> equalityChecker) {
-    if (actual.size() != expected.size()) {
-      fail("Collections don't have the same size. " + stringifyActualExpected(actual, expected));
-    }
-    for (T act : actual) {
-      if (!contains2(expected, act, equalityChecker)) {
-        fail("Unexpected object " + act + stringifyActualExpected(actual, expected));
-      }
-    }
-    // backwards is needed for collections which may contain duplicates, e.g. Lists.
-    for (E exp : expected) {
-      if (!contains(actual, exp, equalityChecker)) {
-        fail("Object " + exp + " not found in actual collection." + stringifyActualExpected(actual, expected));
-      }
-    }
-  }
-
-  private static <T, E> boolean contains(@NotNull Collection<T> collection, @NotNull E object, @NotNull EqualityChecker<T, E> equalityChecker) {
-    for (T t : collection) {
-      if (equalityChecker.areEqual(t, object)) {
-        return true;
-      }
-    }
-    return false;
-  }
-  
-  private static <T, E> boolean contains2(Collection<E> collection, T object, EqualityChecker<T, E> equalityChecker) {
-    for (E e : collection) {
-      if (equalityChecker.areEqual(object, e)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  public static Object[][] loadConfigData(@NotNull File dataFolder) throws IOException {
-    File[] tests = dataFolder.listFiles(new FilenameFilter() {
-      @Override
-      public boolean accept(File dir, String name) {
-        return !name.startsWith(".");
-      }
-    });
-    Object[][] data = new Object[tests.length][];
-    for (int i = 0; i < tests.length; i++) {
-      File testDir = tests[i];
-      File descriptionFile = null;
-      File configFile = null;
-      File resultFile = null;
-      for (File file : testDir.listFiles()) {
-        if (file.getName().endsWith("_desc.txt")) {
-          descriptionFile = file;
-        }
-        else if (file.getName().endsWith("_config.txt")) {
-          configFile = file;
-        }
-        else if (file.getName().endsWith("_result.txt")) {
-          resultFile = file;
-        }
-      }
-      assertNotNull(descriptionFile, String.format("description file not found in %s among %s", testDir, Arrays.toString(testDir.list())));
-      assertNotNull(configFile, String.format("config file file not found in %s among %s", testDir, Arrays.toString(testDir.list())));
-      assertNotNull(resultFile, String.format("result file file not found in %s among %s", testDir, Arrays.toString(testDir.list())));
-
-      String testName = FileUtil.loadFile(descriptionFile).split("\n")[0]; // description is in the first line of the desc-file
-      data[i] = new Object[]{
-        testName, configFile, resultFile
-      };
-    }
-    return data;
-  }
-
-  public static File getTestDataFolder() {
-    File pluginRoot = new File(PluginPathManager.getPluginHomePath("git4idea"));
-    return new File(pluginRoot, "testData");
-  }
-
-  public interface EqualityChecker<T, E> {
-    boolean areEqual(T actual, E expected);
-  }
-
   @NotNull
-  public static String stringifyActualExpected(@NotNull Object actual, @NotNull Object expected) {
-    return "\nExpected:\n" + expected + "\nActual:\n" + actual;
+  public static GitRepository createRepository(@NotNull Project project, @NotNull String root) {
+    initRepo(root);
+    ProjectLevelVcsManagerImpl vcsManager = (ProjectLevelVcsManagerImpl)ProjectLevelVcsManager.getInstance(project);
+    vcsManager.setDirectoryMapping(root, GitVcs.NAME);
+    VirtualFile file = LocalFileSystem.getInstance().findFileByIoFile(new File(root));
+    GitRepository repository = GitUtil.getRepositoryManager(project).getRepositoryForRoot(file);
+    assertNotNull("Couldn't find repository for root " + root, repository);
+    return repository;
+  }
+
+  public static void assertNotification(@NotNull Project project, @Nullable Notification expected) {
+    if (expected == null) {
+      assertNull("Notification is unexpected here", expected);
+      return;
+    }
+
+    Notification actualNotification = ((TestNotificator)ServiceManager.getService(project, Notificator.class)).getLastNotification();
+    Assert.assertNotNull("No notification was shown", actualNotification);
+    Assert.assertEquals("Notification has wrong title", expected.getTitle(), actualNotification.getTitle());
+    Assert.assertEquals("Notification has wrong type", expected.getType(), actualNotification.getType());
+    Assert.assertEquals("Notification has wrong content", expected.getContent(), actualNotification.getContent());
+  }
+
+  /**
+   * Default port will be occupied by main idea instance => define the custom default to avoid searching of free port
+   */
+  public static void setDefaultBuiltInServerPort() {
+    System.setProperty(BuiltInServerManagerImpl.PROPERTY_RPC_PORT, "64463");
   }
 }

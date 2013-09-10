@@ -46,6 +46,7 @@ import com.intellij.xdebugger.impl.frame.XFramesView;
 import com.intellij.xdebugger.impl.frame.XVariablesView;
 import com.intellij.xdebugger.impl.frame.XWatchesView;
 import com.intellij.xdebugger.impl.ui.tree.actions.SortValuesToggleAction;
+import com.intellij.xdebugger.ui.XDebugTabLayouter;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -70,15 +71,6 @@ public class XDebugSessionTab extends DebuggerSessionTabBase {
     XDebugProcess debugProcess = session.getDebugProcess();
     myRunContentDescriptor = new RunContentDescriptor(myConsole, debugProcess.getProcessHandler(), myUi.getComponent(), mySessionName, icon);
     attachToSession(session, runner, environment, session.getSessionData(), debugProcess);
-  }
-
-  private Content createConsoleContent() {
-    Content result = myUi.createContent(DebuggerContentInfo.CONSOLE_CONTENT, myConsole.getComponent(),
-                                        XDebuggerBundle.message("debugger.session.tab.console.content.name"),
-                                        AllIcons.Debugger.Console,
-                                        myConsole.getPreferredFocusableComponent());
-    result.setCloseable(false);
-    return result;
   }
 
   private Content createVariablesContent(final XDebugSession session) {
@@ -129,17 +121,17 @@ public class XDebugSessionTab extends DebuggerSessionTabBase {
     return myWatchesView;
   }
 
-  private void attachToSession(final @NotNull XDebugSession session, final @Nullable ProgramRunner runner,
+  private void attachToSession(final @NotNull XDebugSessionImpl session, final @Nullable ProgramRunner runner,
                                final @Nullable ExecutionEnvironment env, final @NotNull XDebugSessionData sessionData,
                                final @NotNull XDebugProcess debugProcess) {
     myUi.addContent(createFramesContent(session), 0, PlaceInGrid.left, false);
     myUi.addContent(createVariablesContent(session), 0, PlaceInGrid.center, false);
     myUi.addContent(createWatchesContent(session, sessionData), 0, PlaceInGrid.right, false);
-    final Content consoleContent = createConsoleContent();
-    myUi.addContent(consoleContent, 1, PlaceInGrid.bottom, false);
+    XDebugTabLayouter layouter = debugProcess.createTabLayouter();
+    Content consoleContent = layouter.registerConsoleContent(myUi, myConsole);
     attachNotificationTo(consoleContent);
 
-    debugProcess.registerAdditionalContent(myUi);
+    layouter.registerAdditionalContent(myUi);
     RunContentBuilder.addAdditionalConsoleEditorActions(myConsole, consoleContent);
 
     if (ApplicationManager.getApplication().isUnitTestMode()) {
@@ -149,10 +141,13 @@ public class XDebugSessionTab extends DebuggerSessionTabBase {
     DefaultActionGroup leftToolbar = new DefaultActionGroup();
     final Executor executor = DefaultDebugExecutor.getDebugExecutorInstance();
     if (runner != null && env != null) {
-      RestartAction restartAction = new RestartAction(executor, runner, myRunContentDescriptor.getProcessHandler(),
-                                                      myRunContentDescriptor, env);
+      RestartAction restartAction = new RestartAction(executor, runner, myRunContentDescriptor, env);
       leftToolbar.add(restartAction);
       restartAction.registerShortcut(myUi.getComponent());
+
+      List<AnAction> additionalRestartActions = session.getRestartActions();
+      leftToolbar.addAll(additionalRestartActions);
+      if (!additionalRestartActions.isEmpty()) leftToolbar.addSeparator();
     }
 
     leftToolbar.addAll(getCustomizedActionGroup(XDebuggerActions.TOOL_WINDOW_LEFT_TOOLBAR_GROUP));
@@ -183,10 +178,11 @@ public class XDebugSessionTab extends DebuggerSessionTabBase {
     if (commonSettings.length > 0) {
       settings.addSeparator();
     }
-    settings.add(new ToggleSortValuesAction(commonSettings.length == 0));
+    if (!debugProcess.isValuesCustomSorted()) {
+      settings.add(new ToggleSortValuesAction(commonSettings.length == 0));
+    }
 
     leftToolbar.add(settings);
-
 
     leftToolbar.addSeparator();
 
@@ -211,6 +207,7 @@ public class XDebugSessionTab extends DebuggerSessionTabBase {
   }
 
 
+  @Override
   @Nullable
   public RunContentDescriptor getRunContentDescriptor() {
     return myRunContentDescriptor;

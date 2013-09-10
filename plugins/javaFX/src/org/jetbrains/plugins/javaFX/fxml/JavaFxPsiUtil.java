@@ -16,8 +16,8 @@
 package org.jetbrains.plugins.javaFX.fxml;
 
 import com.intellij.codeInsight.AnnotationUtil;
-import com.intellij.codeInsight.daemon.impl.analysis.GenericsHighlightUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
+import com.intellij.codeInsight.daemon.impl.analysis.JavaGenericsUtil;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.xml.XMLLanguage;
 import com.intellij.openapi.diagnostic.Logger;
@@ -109,7 +109,7 @@ public class JavaFxPsiUtil {
       PsiFile file = tag.getContainingFile();
       for (String anImport : imports) {
         if (StringUtil.getShortName(anImport).equals(name)) {
-          psiClass = psiFacade.findClass(anImport, file.getResolveScope()); 
+          psiClass = psiFacade.findClass(anImport, file.getResolveScope());
         } else if (StringUtil.endsWith(anImport, ".*")) {
           psiClass = psiFacade.findClass(StringUtil.trimEnd(anImport, "*") + name, file.getResolveScope());
         }
@@ -149,8 +149,8 @@ public class JavaFxPsiUtil {
   }
 
   public static PsiClassType getPropertyClassType(PsiElement field, final String superTypeFQN) {
-    if (field instanceof PsiField) {
-      final PsiType type = ((PsiField)field).getType();
+    if (field instanceof PsiMember) {
+      final PsiType type = PropertyUtil.getPropertyType((PsiMember)field);
       if (type instanceof PsiClassType) {
         final PsiClassType.ClassResolveResult resolveResult = ((PsiClassType)type).resolveGenerics();
         final PsiClass attributeClass = resolveResult.getElement();
@@ -165,6 +165,9 @@ public class JavaFxPsiUtil {
               if (propertyType instanceof PsiClassType) {
                 return (PsiClassType)propertyType;
               }
+            }
+            else {
+              return (PsiClassType)type;
             }
           }
         }
@@ -187,7 +190,7 @@ public class JavaFxPsiUtil {
   public static PsiMethod findPropertySetter(String attributeName, PsiClass classWithStaticProperty) {
     final String setterName = PropertyUtil.suggestSetterName(StringUtil.getShortName(attributeName));
     final PsiMethod[] setters = classWithStaticProperty.findMethodsByName(setterName, true);
-    if (setters.length == 1) {
+    if (setters.length >= 1) {
       return setters[0];
     }
     return null;
@@ -211,7 +214,7 @@ public class JavaFxPsiUtil {
     }
     return null;
   }
-  
+
   private static final Key<CachedValue<PsiClass>> INJECTED_CONTROLLER = Key.create("javafx.injected.controller");
   private static final RecursionGuard ourGuard = RecursionManager.createGuard("javafx.controller");
   public static PsiClass getControllerClass(final PsiFile containingFile) {
@@ -231,7 +234,7 @@ public class JavaFxPsiUtil {
       final PsiClass injectedControllerClass = ourGuard.doPreventingRecursion(containingFile, true, new Computable<PsiClass>() {
         @Override
         public PsiClass compute() {
-          return manager.getCachedValue(containingFile, INJECTED_CONTROLLER, 
+          return manager.getCachedValue(containingFile, INJECTED_CONTROLLER,
                                         new JavaFxControllerCachedValueProvider(containingFile.getProject(), containingFile), true);
         }
       });
@@ -299,7 +302,7 @@ public class JavaFxPsiUtil {
   }
 
   public static boolean isVisibleInFxml(PsiMember psiMember) {
-    return psiMember.hasModifierProperty(PsiModifier.PUBLIC) || 
+    return psiMember.hasModifierProperty(PsiModifier.PUBLIC) ||
            AnnotationUtil.isAnnotated(psiMember, JavaFxCommonClassNames.JAVAFX_FXML_ANNOTATION, false);
   }
 
@@ -320,7 +323,7 @@ public class JavaFxPsiUtil {
     }
     return null;
   }
-  
+
   public static boolean isReadOnly(String attributeName, XmlTag tag) {
     final XmlElementDescriptor descriptor = tag.getDescriptor();
     if (descriptor != null) {
@@ -334,7 +337,7 @@ public class JavaFxPsiUtil {
       }
     }
     return false;
-    
+
   }
 
   public static boolean isReadOnly(PsiClass psiClass, PsiField psiField) {
@@ -393,9 +396,9 @@ public class JavaFxPsiUtil {
     }
     return null;
   }
-  
+
   public static String getDefaultPropertyName(PsiClass aClass) {
-    final PsiAnnotation annotation = AnnotationUtil.findAnnotationInHierarchy(aClass, 
+    final PsiAnnotation annotation = AnnotationUtil.findAnnotationInHierarchy(aClass,
                                                                               Collections.singleton(JavaFxCommonClassNames.JAVAFX_BEANS_DEFAULT_PROPERTY));
     if (annotation != null) {
       final PsiAnnotationMemberValue memberValue = annotation.findAttributeValue(null);
@@ -480,7 +483,7 @@ public class JavaFxPsiUtil {
   }
 
   private static String canCoerce(PsiClass aClass, PsiType type) {
-    PsiType collectionItemType = GenericsHighlightUtil.getCollectionItemType(type, aClass.getResolveScope());
+    PsiType collectionItemType = JavaGenericsUtil.getCollectionItemType(type, aClass.getResolveScope());
     if (collectionItemType == null && InheritanceUtil.isInheritor(type, JavaFxCommonClassNames.JAVAFX_BEANS_PROPERTY)) {
       collectionItemType = getPropertyType(type, aClass.getProject());
     }
@@ -518,7 +521,7 @@ public class JavaFxPsiUtil {
     final PsiClassType.ClassResolveResult resolveResult = PsiUtil.resolveGenericsClassInType(fieldType);
     final PsiClass fieldClass = resolveResult.getElement();
     if (fieldClass == null) return fieldType;
-    return CachedValuesManager.getManager(project).getCachedValue(fieldClass, new CachedValueProvider<PsiType>() {
+    return CachedValuesManager.getManager(project).getCachedValue(field, new CachedValueProvider<PsiType>() {
       @Nullable
       @Override
       public Result<PsiType> compute() {
@@ -613,7 +616,7 @@ public class JavaFxPsiUtil {
       @Override
       public boolean process(PsiReference reference) {
         final PsiElement element = reference.getElement();
-        if (element instanceof PsiReferenceExpression) { 
+        if (element instanceof PsiReferenceExpression) {
           final PsiMethodCallExpression methodCallExpression = PsiTreeUtil.getParentOfType(element, PsiMethodCallExpression.class);
           if (methodCallExpression != null && isResolveToSetter(methodCallExpression)) {
             final PsiExpression[] expressions = methodCallExpression.getArgumentList().getExpressions();

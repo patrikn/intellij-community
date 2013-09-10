@@ -9,6 +9,7 @@ import com.intellij.tasks.TaskRepository;
 import com.intellij.tasks.TaskType;
 import com.intellij.tasks.impl.BaseRepository;
 import com.intellij.tasks.impl.BaseRepositoryImpl;
+import com.intellij.tasks.impl.TaskUtil;
 import com.intellij.util.NullableFunction;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xmlb.annotations.Tag;
@@ -67,11 +68,11 @@ public class RedmineRepository extends BaseRepositoryImpl {
 
   @Override
   public Task[] getIssues(@Nullable String query, int max, long since) throws Exception {
-    @SuppressWarnings({"unchecked"}) List<Object> children = getIssues(query, max);
+    List<Element> children = getIssues(query, max);
 
-    final List<Task> tasks = ContainerUtil.mapNotNull(children, new NullableFunction<Object, Task>() {
-      public Task fun(Object o) {
-        return createIssue((Element)o);
+    final List<Task> tasks = ContainerUtil.mapNotNull(children, new NullableFunction<Element, Task>() {
+      public Task fun(Element o) {
+        return createIssue(o);
       }
     });
     return tasks.toArray(new Task[tasks.size()]);
@@ -172,6 +173,7 @@ public class RedmineRepository extends BaseRepositoryImpl {
     };
   }
 
+  @Nullable
   private static Date parseDate(Element element, String name) throws ParseException {
     final String date = element.getChildText(name);
     if (date.matches(".*\\+\\d\\d:\\d\\d")) {
@@ -180,7 +182,15 @@ public class RedmineRepository extends BaseRepositoryImpl {
       format.setTimeZone(TimeZone.getTimeZone("GMT" + date.substring(timeZoneIndex)));
       return format.parse(date.substring(0, timeZoneIndex));
     }
-    return (new SimpleDateFormat("EEE MMM dd HH:mm:ss Z yyyy", Locale.US)).parse(date);
+    // Ad-hoc fix for IDEA-110012
+    Date parsed;
+    try {
+      parsed = new SimpleDateFormat("EEE MMM dd HH:mm:ss Z yyyy", Locale.US).parse(date);
+    }
+    catch (ParseException e) {
+      parsed = TaskUtil.parseDate(date);
+    }
+    return parsed;
   }
 
   @Override
@@ -188,8 +198,7 @@ public class RedmineRepository extends BaseRepositoryImpl {
     return super.isConfigured() && !StringUtil.isEmpty(myProjectId);
   }
 
-  @SuppressWarnings({"unchecked"})
-  private List<Object> getIssues(@Nullable String query, int max) throws Exception {
+  private List<Element> getIssues(@Nullable String query, int max) throws Exception {
     String url = "/projects/" + myProjectId + "/issues.xml?";
     final boolean hasKey = !StringUtil.isEmpty(myAPIKey) && !isUseHttpAuthentication();
     if (hasKey) {
@@ -309,6 +318,6 @@ public class RedmineRepository extends BaseRepositoryImpl {
 
   @Override
   protected int getFeatures() {
-    return BASIC_HTTP_AUTHORIZATION;
+    return super.getFeatures() | BASIC_HTTP_AUTHORIZATION;
   }
 }

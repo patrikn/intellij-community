@@ -109,25 +109,25 @@ public class JavaSdkImpl extends JavaSdk {
   }
 
   @Override
-  public void saveAdditionalData(SdkAdditionalData additionalData, Element additional) {
+  public void saveAdditionalData(@NotNull SdkAdditionalData additionalData, @NotNull Element additional) {
   }
 
   @Override
   @SuppressWarnings({"HardCodedStringLiteral"})
-  public String getBinPath(Sdk sdk) {
+  public String getBinPath(@NotNull Sdk sdk) {
     return getConvertedHomePath(sdk) + "bin";
   }
 
   @Override
   @NonNls
-  public String getToolsPath(Sdk sdk) {
+  public String getToolsPath(@NotNull Sdk sdk) {
     final String versionString = sdk.getVersionString();
     final boolean isJdk1_x = versionString != null && (versionString.contains("1.0") || versionString.contains("1.1"));
     return getConvertedHomePath(sdk) + "lib" + File.separator + (isJdk1_x? "classes.zip" : "tools.jar");
   }
 
   @Override
-  public String getVMExecutablePath(Sdk sdk) {
+  public String getVMExecutablePath(@NotNull Sdk sdk) {
     /*
     if ("64".equals(System.getProperty("sun.arch.data.model"))) {
       return getBinPath(sdk) + File.separator + System.getProperty("os.arch") + File.separator + VM_EXE_NAME;
@@ -314,7 +314,7 @@ public class JavaSdkImpl extends JavaSdk {
 
   @Override
   @SuppressWarnings({"HardCodedStringLiteral"})
-  public void setupSdkPaths(Sdk sdk) {
+  public void setupSdkPaths(@NotNull Sdk sdk) {
     final File jdkHome = new File(sdk.getHomePath());
     List<VirtualFile> classes = findClasses(jdkHome, false);
     VirtualFile sources = findSources(jdkHome);
@@ -427,10 +427,6 @@ public class JavaSdkImpl extends JavaSdk {
 
   @Override
   public JavaSdkVersion getVersion(@NotNull Sdk sdk) {
-    return getVersion1(sdk);
-  }
-
-  private static JavaSdkVersion getVersion1(Sdk sdk) {
     String version = sdk.getVersionString();
     if (version == null) return null;
     return JdkVersionUtil.getVersion(version);

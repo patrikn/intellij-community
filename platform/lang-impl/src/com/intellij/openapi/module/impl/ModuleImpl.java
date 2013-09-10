@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,6 +64,8 @@ public class ModuleImpl extends ComponentManagerImpl implements ModuleEx {
   public static final Object MODULE_RENAMING_REQUESTOR = new Object();
 
   private String myName;
+
+  private String myModuleType;
 
   private IModuleStore myComponentStore;
   private final ModuleScopeProvider myModuleScopeProvider;
@@ -237,16 +239,28 @@ public class ModuleImpl extends ComponentManagerImpl implements ModuleEx {
 
   @Override
   public void setOption(@NotNull String optionName, @NotNull String optionValue) {
+    if (ELEMENT_TYPE.equals(optionName)) {
+      myModuleType = optionValue;
+    }
     getStateStore().setOption(optionName, optionValue);
   }
 
   @Override
   public void clearOption(@NotNull String optionName) {
+    if (ELEMENT_TYPE.equals(optionName)) {
+      myModuleType = null;
+    }
     getStateStore().clearOption(optionName);
   }
 
   @Override
   public String getOptionValue(@NotNull String optionName) {
+    if (ELEMENT_TYPE.equals(optionName)) {
+      if (myModuleType == null) {
+        myModuleType = getStateStore().getOptionValue(optionName);
+      }
+      return myModuleType;
+    }
     return getStateStore().getOptionValue(optionName);
   }
 
@@ -315,8 +329,9 @@ public class ModuleImpl extends ComponentManagerImpl implements ModuleEx {
     return StringUtil.trimEnd(fileName, ModuleFileType.DOT_DEFAULT_EXTENSION);
   }
 
+  @NotNull
   @Override
-  public <T> T[] getExtensions(final ExtensionPointName<T> extensionPointName) {
+  public <T> T[] getExtensions(@NotNull final ExtensionPointName<T> extensionPointName) {
     return Extensions.getArea(this).getExtensionPoint(extensionPointName).getExtensions();
   }
 
@@ -349,8 +364,9 @@ public class ModuleImpl extends ComponentManagerImpl implements ModuleEx {
       final VirtualFile moduleFile = getModuleFile();
       if (moduleFile == null) return;
       if (moduleFile.equals(event.getFile())) {
+        String oldName = myName;
         myName = moduleNameByFileName(moduleFile.getName());
-        ModuleManagerImpl.getInstanceImpl(getProject()).fireModuleRenamedByVfsEvent(ModuleImpl.this);
+        ModuleManagerImpl.getInstanceImpl(getProject()).fireModuleRenamedByVfsEvent(ModuleImpl.this, oldName);
       }
     }
 

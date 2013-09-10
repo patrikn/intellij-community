@@ -122,9 +122,31 @@ public class SafeDeleteTest extends MultiFileTestCase {
     doTest("Super");
   }
 
+  public void testOverrideAnnotation() throws Exception {
+    myDoCompare = false;
+    doTest("Super");
+  }
+
+  public void testSuperCall() throws Exception {
+    myDoCompare = false;
+    try {
+      doTest("Super");
+      fail("Conflict was not detected");
+    }
+    catch (BaseRefactoringProcessor.ConflictsInTestsException e) {
+      String message = e.getMessage();
+      assertTrue(message, message.equals("method <b><code>Super.foo()</code></b> has 1 usage that is not safe to delete.\n" +
+                                         "Of those 0 usages are in strings, comments, or non-code files."));
+    }
+  }
+
   public void testMethodDeepHierarchy() throws Exception {
     myDoCompare = false;
     doTest("Super");
+  }
+
+  public void testInterfaceAsTypeParameterBound() throws Exception {
+    doSingleFileTest();   
   }
 
   public void testLocalVariableSideEffect() throws Exception {
@@ -141,6 +163,11 @@ public class SafeDeleteTest extends MultiFileTestCase {
   }
 
   public void testLastResourceVariable() throws Exception {
+    LanguageLevelProjectExtension.getInstance(getProject()).setLanguageLevel(LanguageLevel.JDK_1_7);
+    doSingleFileTest();
+  }
+
+  public void testLastResourceVariableWithFinallyBlock() throws Exception {
     LanguageLevelProjectExtension.getInstance(getProject()).setLanguageLevel(LanguageLevel.JDK_1_7);
     doSingleFileTest();
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
-import com.intellij.codeInsight.CodeInsightUtilBase;
+import com.intellij.codeInsight.CodeInsightUtilCore;
 import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.PsiEquivalenceUtil;
 import com.intellij.codeInsight.daemon.QuickFixBundle;
@@ -206,7 +206,7 @@ public class CreateLocalVarFromInstanceofAction extends BaseIntentionAction {
       final PsiStatement statementInside = isNegated(instanceOfExpression) ? null : getExpressionStatementInside(file, editor, instanceOfExpression.getOperand());
       PsiDeclarationStatement decl = createLocalVariableDeclaration(instanceOfExpression, statementInside);
       if (decl == null) return;
-      decl = CodeInsightUtilBase.forcePsiPostprocessAndRestoreElement(decl);
+      decl = CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(decl);
 
       PsiLocalVariable localVariable = (PsiLocalVariable)decl.getDeclaredElements()[0];
       TemplateBuilderImpl builder = new TemplateBuilderImpl(localVariable);
@@ -342,7 +342,11 @@ public class CreateLocalVarFromInstanceofAction extends BaseIntentionAction {
           anchorAfter = newBranch.getCodeBlock().getLBrace();
         }
         else {
-          anchorAfter = ((PsiBlockStatement)thenBranch).getCodeBlock().getLBrace();
+          final PsiJavaToken lBrace = ((PsiBlockStatement)thenBranch).getCodeBlock().getLBrace();
+          if (lBrace != null) {
+            final PsiElement nextSibling = PsiTreeUtil.skipSiblingsForward(lBrace, PsiWhiteSpace.class);
+            anchorAfter = nextSibling instanceof PsiComment ? PsiTreeUtil.skipSiblingsForward(nextSibling, PsiComment.class) : lBrace;
+          } 
         }
       }
     }

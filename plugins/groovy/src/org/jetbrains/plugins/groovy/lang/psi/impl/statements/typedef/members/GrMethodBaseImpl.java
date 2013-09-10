@@ -40,7 +40,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.extensions.NamedArgumentDescriptor;
 import org.jetbrains.plugins.groovy.gpp.GppTypeConverter;
-import org.jetbrains.plugins.groovy.lang.GrReferenceAdjuster;
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.api.GrDocComment;
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.impl.GrDocCommentUtil;
 import org.jetbrains.plugins.groovy.lang.lexer.TokenSets;
@@ -279,7 +278,7 @@ public abstract class GrMethodBaseImpl extends GrStubElementBase<GrMethodStub> i
       @Override
       public void visitCodeReferenceElement(GrCodeReferenceElement refElement) {
         super.visitCodeReferenceElement(refElement);
-        GrReferenceAdjuster.shortenReference(refElement);
+        org.jetbrains.plugins.groovy.codeStyle.GrReferenceAdjuster.shortenReference(refElement);
       }
     });
     return newTypeElement;
@@ -551,7 +550,7 @@ public abstract class GrMethodBaseImpl extends GrStubElementBase<GrMethodStub> i
   @NotNull
   @Override
   public GrReflectedMethod[] getReflectedMethods() {
-    return CachedValuesManager.getManager(getProject()).getCachedValue(this, new CachedValueProvider<GrReflectedMethod[]>() {
+    return CachedValuesManager.getCachedValue(this, new CachedValueProvider<GrReflectedMethod[]>() {
       @Override
       public Result<GrReflectedMethod[]> compute() {
         return Result.create(GrReflectedMethodImpl.createReflectedMethods(GrMethodBaseImpl.this), PsiModificationTracker.OUT_OF_CODE_BLOCK_MODIFICATION_COUNT);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -725,16 +725,21 @@ public class BalloonImpl implements Balloon, IdeTooltip.Ui, SwingConstants {
 
 
   public void hide() {
+    hide(false);
+  }
+
+  @Override
+  public void hide(boolean ok) {
     if (myDisposed) return;
 
-    hideAndDispose();
+    hideAndDispose(ok);
   }
 
   public void addListener(JBPopupListener listener) {
     myListeners.add(listener);
   }
 
-  private void hideAndDispose() {
+  private void hideAndDispose(final boolean ok) {
     if (myDisposed) return;
 
     myDisposed = true;
@@ -745,7 +750,7 @@ public class BalloonImpl implements Balloon, IdeTooltip.Ui, SwingConstants {
         myFadedOut = true;
 
         for (JBPopupListener each : myListeners) {
-          each.onClosed(new LightweightWindowEvent(BalloonImpl.this));
+          each.onClosed(new LightweightWindowEvent(BalloonImpl.this, ok));
         }
 
         Disposer.dispose(BalloonImpl.this);
@@ -773,7 +778,7 @@ public class BalloonImpl implements Balloon, IdeTooltip.Ui, SwingConstants {
   public void dispose() {
     if (myDisposed) return;
 
-    hideAndDispose();
+    hideAndDispose(false);
   }
 
   protected void onDisposed() {
@@ -1322,11 +1327,11 @@ public class BalloonImpl implements Balloon, IdeTooltip.Ui, SwingConstants {
       if (myImage != null && myAlpha != -1) {
         g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, myAlpha));
 
-        g2d.drawImage(myImage, 0, 0, null);
+        UIUtil.drawImage(g2d, myImage, 0, 0, null);
       }
       else {
         if (myShadow != null) {
-          g.drawImage(myShadow.getImage(), myShadow.getX(), myShadow.getY(), null);
+          UIUtil.drawImage(g, myShadow.getImage(), myShadow.getX(), myShadow.getY(), null);
         }
         myBalloon.myPosition.paintComponent(myBalloon, shapeBounds, (Graphics2D)g, pointTarget);
       }
@@ -1335,7 +1340,8 @@ public class BalloonImpl implements Balloon, IdeTooltip.Ui, SwingConstants {
     private void initComponentImage(Point pointTarget, Rectangle shapeBounds) {
       if (myImage != null) return;
 
-      myImage = UIUtil.createImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
+      //noinspection UndesirableClassUsage
+      myImage = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB); //[kb]: don't use UIUtil.createImage here
       myBalloon.myPosition.paintComponent(myBalloon, shapeBounds, (Graphics2D)myImage.getGraphics(), pointTarget);
     }
 

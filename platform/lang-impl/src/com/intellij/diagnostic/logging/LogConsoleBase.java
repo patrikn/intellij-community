@@ -50,6 +50,7 @@ import javax.swing.event.ChangeEvent;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -156,7 +157,7 @@ public abstract class LogConsoleBase extends AdditionalTabComponent implements L
     myFilter.setSelectedItem(customFilter != null ? customFilter : "");
     new AnAction() {
       {
-        registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_TAB, KeyEvent.SHIFT_DOWN_MASK)),
+        registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_TAB, InputEvent.SHIFT_DOWN_MASK)),
                                   LogConsoleBase.this);
       }
 
@@ -611,7 +612,7 @@ public abstract class LogConsoleBase extends AdditionalTabComponent implements L
   private class ReaderThread implements Runnable {
     private BufferedReader myReader;
     private boolean myRunning = false;
-    private Alarm myAlarm = new Alarm(Alarm.ThreadToUse.POOLED_THREAD, LogConsoleBase.this);
+    private final Alarm myAlarm = new Alarm(Alarm.ThreadToUse.POOLED_THREAD, LogConsoleBase.this);
 
     public ReaderThread(@Nullable Reader reader) {
       myReader = reader != null ? new BufferedReader(reader) : null;

@@ -19,7 +19,6 @@ import com.intellij.Patches;
 import com.intellij.debugger.*;
 import com.intellij.debugger.actions.DebuggerActions;
 import com.intellij.debugger.apiAdapters.ConnectionServiceWrapper;
-import com.intellij.debugger.apiAdapters.TransportServiceWrapper;
 import com.intellij.debugger.engine.evaluation.*;
 import com.intellij.debugger.engine.events.DebuggerCommandImpl;
 import com.intellij.debugger.engine.events.SuspendContextCommandImpl;
@@ -42,15 +41,12 @@ import com.intellij.debugger.ui.tree.render.*;
 import com.intellij.execution.CantRunException;
 import com.intellij.execution.ExecutionException;
 import com.intellij.execution.ExecutionResult;
-import com.intellij.execution.Executor;
 import com.intellij.execution.configurations.RemoteConnection;
-import com.intellij.execution.configurations.RunProfileState;
 import com.intellij.execution.process.ProcessAdapter;
 import com.intellij.execution.process.ProcessEvent;
 import com.intellij.execution.process.ProcessListener;
 import com.intellij.execution.process.ProcessOutputTypes;
 import com.intellij.execution.runners.ExecutionUtil;
-import com.intellij.execution.runners.ProgramRunner;
 import com.intellij.idea.ActionsBundle;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
@@ -547,23 +543,7 @@ public abstract class DebugProcessImpl implements DebugProcess {
 
         myDebugProcessDispatcher.getMulticaster().connectorIsReady();
         try {
-          if (SOCKET_ATTACHING_CONNECTOR_NAME.equals(connector.name()) && Patches.SUN_JDI_CONNECTOR_HANGUP_BUG) {
-            String portString = myConnection.getAddress();
-            String hostString = myConnection.getHostName();
-
-            if (hostString == null || hostString.isEmpty()) {
-              //noinspection HardCodedStringLiteral
-              hostString = "localhost";
-            }
-            hostString += ":";
-
-            final TransportServiceWrapper transportServiceWrapper = TransportServiceWrapper.getTransportService(connector.transport());
-            myConnectionService = transportServiceWrapper.attach(hostString + portString);
-            return myConnectionService.createVirtualMachine();
-          }
-          else {
-            return connector.attach(myArguments);
-          }
+          return connector.attach(myArguments);
         }
         catch (IllegalArgumentException e) {
           throw new CantRunException(e.getLocalizedMessage());
@@ -762,6 +742,7 @@ public abstract class DebugProcessImpl implements DebugProcess {
         getManagerThread().close();
       }
       finally {
+        final VirtualMachineProxyImpl vm = myVirtualMachineProxy;
         myVirtualMachineProxy = null;
         myPositionManager = null;
         myReturnValueWatcher = null;
@@ -774,6 +755,13 @@ public abstract class DebugProcessImpl implements DebugProcess {
         }
         finally {
           setBreakpointsMuted(false);
+          if (vm != null) {
+            try {
+              vm.dispose(); // to be on the safe side ensure that VM mirror, if present, is disposed and invalidated
+            }
+            catch (Throwable ignored) {
+            }
+          }
           myWaitFor.up();
         }
       }
@@ -1343,8 +1331,12 @@ public abstract class DebugProcessImpl implements DebugProcess {
         else {
           // some VM's (like IBM VM 1.4.2 bundled with WebSpere) does not
           // resume threads on dispose() like it should
-          virtualMachineProxy.resume();
-          virtualMachineProxy.dispose();
+          try {
+            virtualMachineProxy.resume();
+          }
+          finally {
+            virtualMachineProxy.dispose();
+          }
         }
       }
       else {
@@ -1622,23 +1614,6 @@ public abstract class DebugProcessImpl implements DebugProcess {
   public GlobalSearchScope getSearchScope() {
     LOG.assertTrue(mySession != null, "Accessing debug session before its initialization");
     return mySession.getSearchScope();
-  }
-
-  @Nullable
-  public ExecutionResult attachVirtualMachine(final Executor executor,
-                                              final ProgramRunner runner,
-                                              final DebuggerSession session,
-                                              final RunProfileState state,
-                                              final RemoteConnection remoteConnection,
-                                              boolean pollConnection) throws ExecutionException {
-    return attachVirtualMachine(new DefaultDebugEnvironment(myProject,
-                                                        executor,
-                                                        runner,
-                                                        state.getRunnerSettings().getRunProfile(),
-                                                        state,
-                                                        remoteConnection,
-                                                        pollConnection),
-                                session);
   }
 
   @Nullable

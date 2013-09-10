@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.ui.popup.PopupChooserBuilder;
 import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -302,11 +303,16 @@ public class ShowUsagesAction extends AnAction implements PopupAction {
     Processor<Usage> collect = new Processor<Usage>() {
       private final UsageTarget[] myUsageTarget = {new PsiElement2UsageTargetAdapter(handler.getPsiElement())};
       @Override
-      public boolean process(@NotNull Usage usage) {
+      public boolean process(@NotNull final Usage usage) {
         synchronized (usages) {
           if (visibleNodes.size() >= maxUsages) return false;
           if(UsageViewManager.isSelfUsage(usage, myUsageTarget)) return true;
-          UsageNode node = usageView.doAppendUsage(usage);
+          UsageNode node = ApplicationManager.getApplication().runReadAction(new Computable<UsageNode>() {
+            @Override
+            public UsageNode compute() {
+              return usageView.doAppendUsage(usage);
+            }
+          });
           usages.add(usage);
           if (node != null) {
             visibleNodes.add(node);
@@ -630,31 +636,14 @@ public class ShowUsagesAction extends AnAction implements PopupAction {
         return processIcon;
       }
     };
-    builder.setCommandButton(new CompositeActiveComponent(spinningProgress, settingsButton));
+    final DefaultActionGroup pinGroup = new DefaultActionGroup();
+    final ActiveComponent pin = createPinButton(descriptor, usageView, options, popup, pinGroup);
+    builder.setCommandButton(new CompositeActiveComponent(spinningProgress, settingsButton, pin));
 
     DefaultActionGroup toolbar = new DefaultActionGroup();
     usageView.addFilteringActions(toolbar);
 
-    toolbar.add(UsageGroupingRuleProviderImpl.createGroupByFileStructureAction(usageView));
-    toolbar.add(new AnAction("Open Find Usages Toolwindow", "Show all usages in a separate toolwindow", AllIcons.Toolwindows.ToolWindowFind) {
-      {
-        AnAction action = ActionManager.getInstance().getAction(IdeActions.ACTION_FIND_USAGES);
-        setShortcutSet(action.getShortcutSet());
-      }
-      @Override
-      public void actionPerformed(AnActionEvent e) {
-        hideHints();
-        popup[0].cancel();
-        FindUsagesManager findUsagesManager = ((FindManagerImpl)FindManager.getInstance(usageView.getProject())).getFindUsagesManager();
-        FindUsagesManager.SearchData data = new FindUsagesManager.SearchData();
-        data.myOptions = options;
-        List<SmartPsiElementPointer<PsiElement>> plist = descriptor.getAllElementPointers();
-
-        data.myElements = plist.toArray(new SmartPsiElementPointer[plist.size()]);
-        findUsagesManager.rerunAndRecallFromHistory(data);
-      }
-    });
-
+    toolbar.add(UsageGroupingRuleProviderImpl.createGroupByFileStructureAction(usageView)); 
     ActionToolbar actionToolbar = ActionManager.getInstance().createActionToolbar(ActionPlaces.USAGE_VIEW_TOOLBAR, toolbar, true);
     actionToolbar.setReservePlaceAutoPopupIcon(false);
     final JComponent toolBar = actionToolbar.getComponent();
@@ -673,7 +662,54 @@ public class ShowUsagesAction extends AnAction implements PopupAction {
       action.registerCustomShortcutSet(action.getShortcutSet(), content);
     }
 
+    for (AnAction action : pinGroup.getChildren(null)) {
+      action.unregisterCustomShortcutSet(usageView.getComponent());
+      action.registerCustomShortcutSet(action.getShortcutSet(), content);
+    }
+
     return popup[0];
+  }
+
+  private ActiveComponent createPinButton(final UsageInfoToUsageConverter.TargetElementsDescriptor descriptor,
+                                          final UsageViewImpl usageView,
+                                          final FindUsagesOptions options, final JBPopup[] popup, DefaultActionGroup pinGroup) {
+    final AnAction pinAction =
+      new AnAction("Open Find Usages Toolwindow", "Show all usages in a separate toolwindow", AllIcons.General.AutohideOff) {
+        {
+          AnAction action = ActionManager.getInstance().getAction(IdeActions.ACTION_FIND_USAGES);
+          setShortcutSet(action.getShortcutSet());
+        }
+
+        @Override
+        public void actionPerformed(AnActionEvent e) {
+          hideHints();
+          popup[0].cancel();
+          FindUsagesManager findUsagesManager = ((FindManagerImpl)FindManager.getInstance(usageView.getProject())).getFindUsagesManager();
+          FindUsagesManager.SearchData data = new FindUsagesManager.SearchData();
+          data.myOptions = options;
+          List<SmartPsiElementPointer<PsiElement>> plist = descriptor.getAllElementPointers();
+
+          data.myElements = plist.toArray(new SmartPsiElementPointer[plist.size()]);
+          findUsagesManager.rerunAndRecallFromHistory(data);
+        }
+      };
+    pinGroup.add(pinAction);
+    final ActionToolbar pinToolbar = ActionManager.getInstance().createActionToolbar(ActionPlaces.USAGE_VIEW_TOOLBAR, pinGroup, true);
+    pinToolbar.setReservePlaceAutoPopupIcon(false);
+    final JComponent pinToolBar = pinToolbar.getComponent();
+    pinToolBar.setBorder(null);
+    pinToolBar.setOpaque(false);
+
+    return new ActiveComponent() {
+      @Override
+      public void setActive(boolean active) {
+      }
+
+      @Override
+      public JComponent getComponent() {
+        return pinToolBar;
+      }
+    };
   }
 
   @NotNull

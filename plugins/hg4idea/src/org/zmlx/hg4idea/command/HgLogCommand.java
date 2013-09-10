@@ -23,6 +23,7 @@ import org.jetbrains.annotations.Nullable;
 import org.zmlx.hg4idea.HgFile;
 import org.zmlx.hg4idea.HgFileRevision;
 import org.zmlx.hg4idea.HgRevisionNumber;
+import org.zmlx.hg4idea.HgVcs;
 import org.zmlx.hg4idea.execution.HgCommandException;
 import org.zmlx.hg4idea.execution.HgCommandExecutor;
 import org.zmlx.hg4idea.execution.HgCommandResult;
@@ -36,10 +37,12 @@ import java.util.*;
 public class HgLogCommand {
 
   private static final Logger LOG = Logger.getInstance(HgLogCommand.class.getName());
-
   private static final String[] SHORT_TEMPLATE_ITEMS =
     {"{rev}", "{node|short}", "{parents}", "{date|isodatesec}", "{author}", "{branches}", "{desc}"};
   private static final String[] LONG_TEMPLATE_ITEMS =
+    {"{rev}", "{node|short}", "{parents}", "{date|isodatesec}", "{author}", "{branches}", "{desc}", "{file_adds}", "{file_mods}",
+      "{file_dels}", "{join(file_copies,'" + HgChangesetUtil.FILE_SEPARATOR + "')}"};
+  private static final String[] LONG_TEMPLATE_FOR_OLD_VERSIONS =
     {"{rev}", "{node|short}", "{parents}", "{date|isodatesec}", "{author}", "{branches}", "{desc}", "{file_adds}", "{file_mods}",
       "{file_dels}", "{file_copies}"};
 
@@ -96,7 +99,26 @@ public class HgLogCommand {
       return Collections.emptyList();
     }
 
-    String template = HgChangesetUtil.makeTemplate(includeFiles ? LONG_TEMPLATE_ITEMS : SHORT_TEMPLATE_ITEMS);
+    String template;
+    boolean shouldParseOldTemplate = false;
+    if (!includeFiles) {
+      template = HgChangesetUtil.makeTemplate(SHORT_TEMPLATE_ITEMS);
+    }
+    else {
+      HgVcs vcs = HgVcs.getInstance(myProject);
+      if (vcs == null) {
+        LOG.info("Vcs couldn't be null for project");
+        return Collections.emptyList();
+      }
+      if (!vcs.getVersion().isBuildInFunctionSupported()) {
+        template = HgChangesetUtil.makeTemplate(LONG_TEMPLATE_FOR_OLD_VERSIONS);
+        shouldParseOldTemplate = true;
+      }
+      else {
+        template = HgChangesetUtil.makeTemplate(LONG_TEMPLATE_ITEMS);
+      }
+    }
+
     int expectedItemCount = includeFiles ? LONG_TEMPLATE_ITEMS.length : SHORT_TEMPLATE_ITEMS.length;
 
     FilePath originalFileName = HgUtil.getOriginalFileName(hgFile.toFilePath(), ChangeListManager.getInstance(myProject));
@@ -118,7 +140,7 @@ public class HgLogCommand {
       try {
         String[] attributes = line.split(HgChangesetUtil.ITEM_SEPARATOR);
         // At least in the case of the long template, it's OK that we don't have everything...for example, if there were no
-        //  deleted or copied files, then we won't get any attribtes for them...
+        //  deleted or copied files, then we won't get any attributes for them...
         int numAttributes = attributes.length;
         if (!includeFiles && (numAttributes != expectedItemCount)) {
           LOG.debug("Wrong format. Skipping line " + line);
@@ -172,7 +194,9 @@ public class HgLogCommand {
               filesDeleted = parseFileList(attributes[FILES_DELETED_INDEX]);
 
               if (numAttributes > FILES_COPIED_INDEX) {
-                copies = parseCopiesFileList(attributes[FILES_COPIED_INDEX]);
+                copies = shouldParseOldTemplate
+                         ? parseCopiesFileListAsOldVersion(attributes[FILES_COPIED_INDEX])
+                         : parseCopiesFileList(attributes[FILES_COPIED_INDEX]);
                 // Only keep renames, i.e. copies where the source file is also deleted.
                 Iterator<String> keys = copies.keySet().iterator();
                 while (keys.hasNext()) {
@@ -244,25 +268,72 @@ public class HgLogCommand {
   }
 
   @NotNull
-  private static Map<String, String> parseCopiesFileList(@Nullable String fileListString) {
+  public static Map<String, String> parseCopiesFileList(@Nullable String fileListString) {
+    if (StringUtil.isEmpty(fileListString)) {
+      return Collections.emptyMap();
+    }
+    Map<String, String> copies = new HashMap<String, String>();
+    String[] filesList = fileListString.split(HgChangesetUtil.FILE_SEPARATOR);
+
+    for (String pairOfFiles : filesList) {
+      String[] files = pairOfFiles.split("\\s+\\(");
+      if (files.length != 2) {
+        LOG.info("Couldn't parse copied files: " + fileListString);
+        return copies;
+      }
+      copies.put(files[1].substring(0, files[1].length() - 1), files[0]);
+    }
+    return copies;
+  }
+
+  @NotNull
+  public static Map<String, String> parseCopiesFileListAsOldVersion(@Nullable String fileListString) {
     if (StringUtil.isEmpty(fileListString)) {
       return Collections.emptyMap();
     }
     else {
       Map<String, String> copies = new HashMap<String, String>();
+      //hg copied files output looks like: "target1 (source1)target2 (source2)target3 ....  (target_n)"
+      //so we should split i-1 source from i target.
+      // If some sources or targets contains '(' we suppose that it has Regular Bracket sequence and perform appropriate string parsing.
+      //if it fails just return. (to avoid  ArrayIndexOutOfBoundsException)
+      String[] filesList = fileListString.split("\\s+\\(");
+      String target = filesList[0];
 
-      assert fileListString != null; // checked via StringUtil
-      String[] filesList = fileListString.split("\\)");
-
-      for (String files : filesList) {
-        String[] file = files.split(" \\(");
-        String target = file[0];
-        String source = file[1];
-
-        copies.put(source, target);
+      for (int i = 1; i < filesList.length; ++i) {
+        String source = filesList[i];
+        int afterRightBraceIndex = findRightBracePosition(source);
+        if (afterRightBraceIndex == -1) {
+          break;
+        }
+        copies.put(source.substring(0, afterRightBraceIndex - 1), target);
+        if (afterRightBraceIndex >= source.length()) {                  //the last 'word' in str
+          break;
+        }
+        target = source.substring(afterRightBraceIndex);
       }
-
       return copies;
     }
+  }
+
+  private static int findRightBracePosition(@NotNull String str) {
+    int len = str.length();
+    int depth = 1;
+    for (int i = 0; i < len; ++i) {
+      char c = str.charAt(i);
+      switch (c) {
+        case '(':
+          depth++;
+          break;
+        case ')':
+          depth--;
+          break;
+      }
+      if (depth == 0) {
+        return i + 1;
+      }
+    }
+    LOG.info("Unexpected output during parse copied files in log command " + str);
+    return -1;
   }
 }

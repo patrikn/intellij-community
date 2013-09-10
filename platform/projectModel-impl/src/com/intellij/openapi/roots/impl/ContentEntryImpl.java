@@ -19,7 +19,10 @@ package com.intellij.openapi.roots.impl;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.Extensions;
-import com.intellij.openapi.roots.*;
+import com.intellij.openapi.roots.ContentEntry;
+import com.intellij.openapi.roots.ContentFolder;
+import com.intellij.openapi.roots.ExcludeFolder;
+import com.intellij.openapi.roots.SourceFolder;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.openapi.util.WriteExternalException;
@@ -29,10 +32,17 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.pointers.VirtualFilePointer;
 import com.intellij.openapi.vfs.pointers.VirtualFilePointerManager;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.SmartList;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.jps.model.JpsElement;
+import org.jetbrains.jps.model.JpsElementFactory;
+import org.jetbrains.jps.model.JpsSimpleElement;
+import org.jetbrains.jps.model.java.JavaSourceRootProperties;
+import org.jetbrains.jps.model.java.JavaSourceRootType;
+import org.jetbrains.jps.model.module.JpsModuleSourceRootType;
 import org.jetbrains.jps.model.serialization.module.JpsModuleRootModelSerializer;
 
 import java.util.*;
@@ -97,9 +107,28 @@ public class ContentEntryImpl extends RootModelComponentBase implements ContentE
     return myRoot.getUrl();
   }
 
+  @NotNull
   @Override
   public SourceFolder[] getSourceFolders() {
     return mySourceFolders.toArray(new SourceFolder[mySourceFolders.size()]);
+  }
+
+  @NotNull
+  @Override
+  public List<SourceFolder> getSourceFolders(@NotNull JpsModuleSourceRootType<?> rootType) {
+    return getSourceFolders(Collections.singleton(rootType));
+  }
+
+  @NotNull
+  @Override
+  public List<SourceFolder> getSourceFolders(@NotNull Set<? extends JpsModuleSourceRootType<?>> rootTypes) {
+    SmartList<SourceFolder> folders = new SmartList<SourceFolder>();
+    for (SourceFolder folder : mySourceFolders) {
+      if (rootTypes.contains(folder.getRootType())) {
+        folders.add(folder);
+      }
+    }
+    return folders;
   }
 
   @Override
@@ -117,6 +146,7 @@ public class ContentEntryImpl extends RootModelComponentBase implements ContentE
     return VfsUtilCore.toVirtualFileArray(result);
   }
 
+  @NotNull
   @Override
   public ExcludeFolder[] getExcludeFolders() {
     //assert !isDisposed();
@@ -154,25 +184,39 @@ public class ContentEntryImpl extends RootModelComponentBase implements ContentE
     return VfsUtilCore.toVirtualFileArray(result);
   }
 
+  @NotNull
   @Override
   public SourceFolder addSourceFolder(@NotNull VirtualFile file, boolean isTestSource) {
-    assertCanAddFolder(file);
-    return addSourceFolder(new SourceFolderImpl(file, isTestSource, this));
+    return addSourceFolder(file, isTestSource, SourceFolderImpl.DEFAULT_PACKAGE_PREFIX);
+  }
+
+  @NotNull
+  @Override
+  public SourceFolder addSourceFolder(@NotNull VirtualFile file, boolean isTestSource, @NotNull String packagePrefix) {
+    JavaSourceRootType type = isTestSource ? JavaSourceRootType.TEST_SOURCE : JavaSourceRootType.SOURCE;
+    JpsSimpleElement<JavaSourceRootProperties> properties = JpsElementFactory.getInstance().createSimpleElement(new JavaSourceRootProperties(""));
+    return addSourceFolder(file, type, properties);
   }
 
   @Override
-  public SourceFolder addSourceFolder(@NotNull VirtualFile file, boolean isTestSource, @NotNull String packagePrefix) {
+  @NotNull
+  public <P extends JpsElement> SourceFolder addSourceFolder(@NotNull VirtualFile file, @NotNull JpsModuleSourceRootType<P> type,
+                                                             @NotNull P properties) {
     assertCanAddFolder(file);
-    return addSourceFolder(new SourceFolderImpl(file, isTestSource, packagePrefix, this));
+    return addSourceFolder(new SourceFolderImpl(file, JpsElementFactory.getInstance().createModuleSourceRoot(file.getUrl(), type, properties), this));
   }
 
+  @NotNull
   @Override
   public SourceFolder addSourceFolder(@NotNull String url, boolean isTestSource) {
     assertFolderUnderMe(url);
-    return addSourceFolder(new SourceFolderImpl(url, isTestSource, this));
+    JavaSourceRootType type = isTestSource ? JavaSourceRootType.TEST_SOURCE : JavaSourceRootType.SOURCE;
+    JpsSimpleElement<JavaSourceRootProperties> properties = JpsElementFactory.getInstance().createSimpleElement(new JavaSourceRootProperties(""));
+    return addSourceFolder(new SourceFolderImpl(JpsElementFactory.getInstance().createModuleSourceRoot(url, type, properties), this));
   }
 
-  private SourceFolder addSourceFolder(SourceFolderImpl f) {
+  @NotNull
+  private SourceFolder addSourceFolder(@NotNull SourceFolderImpl f) {
     mySourceFolders.add(f);
     Disposer.register(this, f); //rewire source folder dispose parent from rootmodel to this content root
     return f;
@@ -293,9 +337,7 @@ public class ContentEntryImpl extends RootModelComponentBase implements ContentE
     element.setAttribute(URL_ATTRIBUTE, myRoot.getUrl());
     for (final SourceFolder sourceFolder : mySourceFolders) {
       if (sourceFolder instanceof SourceFolderImpl) {
-        final Element subElement = new Element(SourceFolderImpl.ELEMENT_NAME);
-        ((SourceFolderImpl)sourceFolder).writeExternal(subElement);
-        element.addContent(subElement);
+        JpsModuleRootModelSerializer.saveSourceRoot(element, sourceFolder.getUrl(), ((SourceFolderImpl)sourceFolder).getJpsElement().asTyped());
       }
     }
 

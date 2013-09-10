@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,15 +19,14 @@ import com.intellij.codeInsight.*;
 import com.intellij.codeInsight.completion.scope.JavaCompletionProcessor;
 import com.intellij.codeInsight.lookup.*;
 import com.intellij.openapi.util.Key;
-import com.intellij.patterns.ElementPattern;
-import com.intellij.patterns.PsiElementPattern;
-import com.intellij.patterns.PsiJavaPatterns;
+import com.intellij.patterns.*;
 import com.intellij.psi.*;
 import com.intellij.psi.filters.ElementExtractorFilter;
 import com.intellij.psi.filters.ElementFilter;
 import com.intellij.psi.filters.GeneratorFilter;
 import com.intellij.psi.filters.OrFilter;
 import com.intellij.psi.filters.getters.*;
+import com.intellij.psi.filters.position.FilterPattern;
 import com.intellij.psi.filters.types.AssignableFromFilter;
 import com.intellij.psi.filters.types.AssignableGroupFilter;
 import com.intellij.psi.filters.types.AssignableToFilter;
@@ -92,6 +91,12 @@ public class JavaSmartCompletionContributor extends CompletionContributor {
       psiElement().withText(")").withParent(PsiTypeCastExpression.class)));
   static final PsiElementPattern.Capture<PsiElement> IN_TYPE_ARGS =
     psiElement().inside(psiElement(PsiReferenceParameterList.class));
+  static final PsiElementPattern.Capture<PsiElement> LAMBDA = psiElement().with(new PatternCondition<PsiElement>("LAMBDA_CONTEXT") {
+    @Override
+    public boolean accepts(@NotNull PsiElement element, ProcessingContext context) {
+      final PsiElement rulezzRef = element.getParent();
+      return rulezzRef != null && LambdaUtil.isValidLambdaContext(rulezzRef.getParent());
+    }});
 
   @Nullable
   private static ElementFilter getReferenceFilter(PsiElement element) {
@@ -313,6 +318,8 @@ public class JavaSmartCompletionContributor extends CompletionContributor {
         }
       }
     });
+
+    extend(CompletionType.SMART, LAMBDA, new LambdaCompletionProvider());
   }
 
   private static void addExpectedTypeMembers(CompletionParameters params,
@@ -378,11 +385,11 @@ public class JavaSmartCompletionContributor extends CompletionContributor {
       final PsiClassType classType = factory
           .createTypeByFQClassName(CommonClassNames.JAVA_LANG_RUNTIME_EXCEPTION, position.getResolveScope());
       final List<ExpectedTypeInfo> result = new SmartList<ExpectedTypeInfo>();
-      result.add(new ExpectedTypeInfoImpl(classType, ExpectedTypeInfo.TYPE_OR_SUBTYPE, 0, classType, TailType.SEMICOLON));
+      result.add(new ExpectedTypeInfoImpl(classType, ExpectedTypeInfo.TYPE_OR_SUBTYPE, classType, TailType.SEMICOLON));
       final PsiMethod method = PsiTreeUtil.getContextOfType(position, PsiMethod.class, true);
       if (method != null) {
         for (final PsiClassType type : method.getThrowsList().getReferencedTypes()) {
-          result.add(new ExpectedTypeInfoImpl(type, ExpectedTypeInfo.TYPE_OR_SUBTYPE, 0, type, TailType.SEMICOLON));
+          result.add(new ExpectedTypeInfoImpl(type, ExpectedTypeInfo.TYPE_OR_SUBTYPE, type, TailType.SEMICOLON));
         }
       }
       return result.toArray(new ExpectedTypeInfo[result.size()]);
@@ -474,10 +481,10 @@ public class JavaSmartCompletionContributor extends CompletionContributor {
         return;
       }
       if (parent instanceof PsiParenthesizedExpression) {
-        context.setDummyIdentifier("xxx)yyy "); // to handle type cast
+        context.setDummyIdentifier(CompletionUtil.DUMMY_IDENTIFIER_TRIMMED + ")" + CompletionUtil.DUMMY_IDENTIFIER_TRIMMED + " "); // to handle type cast
         return;
       }
     }
-    context.setDummyIdentifier("xxx");
+    context.setDummyIdentifier(CompletionUtil.DUMMY_IDENTIFIER_TRIMMED);
   }
 }

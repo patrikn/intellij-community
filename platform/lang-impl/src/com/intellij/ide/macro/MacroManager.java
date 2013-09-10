@@ -56,6 +56,7 @@ public final class MacroManager {
     registerMacro(new FileNameWithoutExtension());
     registerMacro(new FileNameWithoutAllExtensions());
     registerMacro(new FilePathMacro());
+    registerMacro(new UnixSeparatorsMacro());
     registerMacro(new FileEncodingMacro());
     registerMacro(new FileDirRelativeToProjectRootMacro());
     registerMacro(new FilePathRelativeToProjectRootMacro());
@@ -80,6 +81,7 @@ public final class MacroManager {
     registerMacro(new LineNumberMacro());
     registerMacro(new ColumnNumberMacro());
 
+    registerMacro(new ClipboardContentMacro());
     registerMacro(new SelectedTextMacro());
     registerMacro(new SelectionStartLineMacro());
     registerMacro(new SelectionStartColumnMacro());

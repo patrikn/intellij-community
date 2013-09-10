@@ -50,6 +50,9 @@
     <extensionPoint name="compiler.makeDependencyProcessor"
                     interface="com.intellij.compiler.DependencyProcessor"/>
 
+    <extensionPoint name="compiler.optionsManager"
+                    interface="com.intellij.compiler.options.CompilerOptionsFilter"/>
+
     <extensionPoint name="compiler.resourceCompilerExtension"
                     interface="com.intellij.compiler.impl.resourceCompiler.ResourceCompilerExtension"/>
 
@@ -69,18 +72,21 @@
 
     <!--new project wizard-->
     <extensionPoint name="wizardMode" interface="com.intellij.ide.util.newProjectWizard.modes.WizardMode"/>
+    <extensionPoint name="projectWizard.projectCategory" interface="com.intellij.ide.projectWizard.ProjectCategory"/>
     <extensionPoint name="projectImportProvider" interface="com.intellij.projectImport.ProjectImportProvider"/>
     <extensionPoint name="projectImportBuilder" interface="com.intellij.projectImport.ProjectImportBuilder"/>
     <extensionPoint name="projectStructureDetector" interface="com.intellij.ide.util.projectWizard.importSources.ProjectStructureDetector"/>
 
     <extensionPoint name="codeInsight.wordCompletionFilter" beanClass="com.intellij.lang.LanguageExtensionPoint"/>
 
+    <extensionPoint name="projectStructureConfigurableFilter" interface="com.intellij.openapi.roots.ui.configuration.ProjectStructureConfigurableFilter"/>
+    <extensionPoint name="projectStructureConfigurableAdder" interface="com.intellij.openapi.roots.ui.configuration.ProjectStructureConfigurableContributor"/>
 
     <extensionPoint name="compiler" area="IDEA_PROJECT" interface="com.intellij.openapi.compiler.Compiler"/>
     <extensionPoint name="compilerFactory" area="IDEA_PROJECT" interface="com.intellij.openapi.compiler.CompilerFactory"/>
     <extensionPoint name="compilerSettingsFactory" area="IDEA_PROJECT" interface="com.intellij.compiler.CompilerSettingsFactory"/>
     <extensionPoint name="compileServer.plugin" beanClass="com.intellij.compiler.server.CompileServerPlugin"/>
-    <extensionPoint name="compileServer.pathProvider" area="IDEA_PROJECT" interface="com.intellij.compiler.server.CompileServerPathProvider"/>
+    <extensionPoint name="buildProcess.parametersProvider" area="IDEA_PROJECT" interface="com.intellij.compiler.server.BuildProcessParametersProvider"/>
 
 
     <extensionPoint name="paletteItemProvider" area="IDEA_PROJECT" interface="com.intellij.ide.palette.PaletteItemProvider"/>
@@ -128,8 +134,6 @@
                         serviceImplementation="com.intellij.openapi.roots.ui.configuration.DefaultModuleConfigurationEditorFactoryImpl"/>
     <applicationService serviceInterface="com.intellij.ide.util.projectWizard.ProjectWizardStepFactory"
                         serviceImplementation="com.intellij.ide.util.projectWizard.ProjectWizardStepFactoryImpl"/>
-
-    <applicationService serviceInterface="com.intellij.peer.PeerFactory" serviceImplementation="com.intellij.peer.impl.PeerFactoryImpl"/>
 
     <applicationService serviceInterface="com.intellij.openapi.deployment.DeploymentUtil"
                         serviceImplementation="com.intellij.openapi.deployment.DeploymentUtilImpl"/>
@@ -222,6 +226,7 @@
                     serviceImplementation="com.intellij.compiler.impl.rmiCompiler.RmicConfiguration"/>
     <projectService serviceInterface="com.intellij.compiler.impl.javaCompiler.jikes.JikesConfiguration"
                     serviceImplementation="com.intellij.compiler.impl.javaCompiler.jikes.JikesConfiguration"/>
+    <pathMacroFilter implementation="com.intellij.compiler.impl.javaCompiler.javac.JavacConfigurationMacroFilter"/>
 
     <applicationService serviceInterface="com.intellij.openapi.wm.impl.FrameTitleBuilder"
                         serviceImplementation="com.intellij.openapi.wm.IdeaFrameTitleBuilder"/>
@@ -282,6 +287,8 @@
 
     <editorNotificationProvider implementation="com.intellij.codeInsight.daemon.impl.AttachSourcesNotificationProvider"/>
     <editorNotificationProvider implementation="com.intellij.codeInsight.daemon.impl.SetupSDKNotificationProvider"/>
+
+    <attachSourcesProvider implementation="com.intellij.jarFinder.InternetAttachSourceProvider"/>
 
     <checkoutListener implementation="com.intellij.openapi.vcs.checkout.ProjectCheckoutListener"/>
     <checkoutListener implementation="com.intellij.openapi.vcs.checkout.ProjectDirCheckoutListener"/>
@@ -361,12 +368,6 @@
     <exportable serviceInterface="com.intellij.profile.codeInspection.InspectionProfileManager"/>
     <schemeOwner serviceInterface="com.intellij.profile.codeInspection.InspectionProfileManager"/>
 
-    <!-- File Exclusions -->
-    <!--
-    <projectService serviceInterface="com.intellij.openapi.file.exclude.ProjectFileExclusionManager"
-                    serviceImplementation="com.intellij.openapi.file.exclude.ProjectFileExclusionManagerImpl"/>
-    <projectConfigurable instance="com.intellij.openapi.file.exclude.ui.ExcludedFilesConfigurable"/>
-    -->
     <fileTypeFactory implementation="com.intellij.openapi.file.exclude.EnforcedPlainTextFileTypeFactory"/>
     <applicationService serviceInterface="com.intellij.openapi.file.exclude.EnforcedPlainTextFileTypeManager"
                     serviceImplementation="com.intellij.openapi.file.exclude.EnforcedPlainTextFileTypeManager"/>
@@ -382,9 +383,17 @@
     <applicationService serviceInterface="com.intellij.openapi.roots.ui.configuration.projectRoot.daemon.ProjectStructureProblemsSettings"
                         serviceImplementation="com.intellij.openapi.roots.ui.configuration.projectRoot.daemon.GlobalProjectStructureProblemsSettings"/>
     <moduleRendererFactory implementation="com.intellij.ide.util.DefaultModuleRendererFactory" order="last"/>
+    <projectStructure.sourceRootEditHandler implementation="com.intellij.openapi.roots.ui.configuration.JavaResourceRootEditHandler"/>
+    <projectStructure.sourceRootEditHandler implementation="com.intellij.openapi.roots.ui.configuration.JavaTestResourceRootEditHandler"/>
   </extensions>
 
   <xi:include href="/META-INF/xdebugger.xml" xpointer="xpointer(/idea-plugin/*)"/>
+  <xi:include href="/META-INF/RemoteServers.xml" xpointer="xpointer(/idea-plugin/*)">
+    <xi:fallback/>
+  </xi:include>
+  <xi:include href="/META-INF/RemoteServersJava.xml" xpointer="xpointer(/idea-plugin/*)">
+    <xi:fallback/>
+  </xi:include>
 
   <xi:include href="/META-INF/XmlPlugin.xml" xpointer="xpointer(/idea-plugin/*)"/>
   <xi:include href="/META-INF/RegExpPlugin.xml" xpointer="xpointer(/idea-plugin/*)"/>

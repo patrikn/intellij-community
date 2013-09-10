@@ -15,6 +15,7 @@
  */
 package com.intellij.openapi.application.impl;
 
+import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.application.ex.ApplicationInfoEx;
@@ -53,6 +54,7 @@ public class ApplicationInfoImpl extends ApplicationInfoEx implements JDOMExtern
   private Color myProgressColor = null;
   private Color myAboutForeground = Color.black;
   private Color myAboutLinkColor = null;
+  private String myProgressTailIconName = null;
   private Icon myProgressTailIcon = null;
 
   private int myProgressY = 350;
@@ -94,6 +96,7 @@ public class ApplicationInfoImpl extends ApplicationInfoEx implements JDOMExtern
   private String[] myEssentialPluginsIds;
   private String myStatisticsSettingsUrl;
   private String myStatisticsServiceUrl;
+  private String myStatisticsServiceKey;
   private String myThirdPartySoftwareUrl;
 
   private Rectangle myAboutLogoRect;
@@ -162,6 +165,7 @@ public class ApplicationInfoImpl extends ApplicationInfoEx implements JDOMExtern
   @NonNls private static final String ELEMENT_STATISTICS = "statistics";
   @NonNls private static final String ATTRIBUTE_STATISTICS_SETTINGS = "settings";
   @NonNls private static final String ATTRIBUTE_STATISTICS_SERVICE = "service";
+  @NonNls private static final String ATTRIBUTE_STATISTICS_SERVICE_KEY = "service-key";
 
   @NonNls private static final String ELEMENT_THIRD_PARTY = "third-party";
 
@@ -248,6 +252,9 @@ public class ApplicationInfoImpl extends ApplicationInfoEx implements JDOMExtern
 
   @Nullable
   public Icon getProgressTailIcon() {
+    if (myProgressTailIcon == null && myProgressTailIconName != null) {
+      myProgressTailIcon = IconLoader.getIcon(myProgressTailIconName);
+    }
     return myProgressTailIcon;
   }
 
@@ -397,6 +404,10 @@ public class ApplicationInfoImpl extends ApplicationInfoEx implements JDOMExtern
     return myStatisticsServiceUrl;
   }
 
+  public String getStatisticsServiceKey() {
+    return myStatisticsServiceKey;
+  }
+
   @Override
   public String getThirdPartySoftwareURL() {
     return myThirdPartySoftwareUrl;
@@ -454,6 +465,7 @@ public class ApplicationInfoImpl extends ApplicationInfoEx implements JDOMExtern
     Element buildElement = parentNode.getChild(ELEMENT_BUILD);
     if (buildElement != null) {
       myBuildNumber = buildElement.getAttributeValue(ATTRIBUTE_NUMBER);
+      PluginManagerCore.BUILD_NUMBER = myBuildNumber;
       String dateString = buildElement.getAttributeValue(ATTRIBUTE_DATE);
       if (dateString.equals("__BUILD_DATE__")) {
         myBuildDate = new GregorianCalendar();
@@ -492,7 +504,7 @@ public class ApplicationInfoImpl extends ApplicationInfoEx implements JDOMExtern
 
       v = logoElement.getAttributeValue(ATTRIBUTE_PROGRESS_TAIL_ICON);
       if (v != null) {
-        myProgressTailIcon = IconLoader.getIcon(v);
+        myProgressTailIconName = v;
       }
 
       v = logoElement.getAttributeValue(ATTRIBUTE_PROGRESS_Y);
@@ -653,11 +665,13 @@ public class ApplicationInfoImpl extends ApplicationInfoEx implements JDOMExtern
     Element statisticsElement = parentNode.getChild(ELEMENT_STATISTICS);
     if (statisticsElement != null) {
       myStatisticsSettingsUrl = statisticsElement.getAttributeValue(ATTRIBUTE_STATISTICS_SETTINGS);
-      myStatisticsServiceUrl = statisticsElement.getAttributeValue(ATTRIBUTE_STATISTICS_SERVICE);
+      myStatisticsServiceUrl  = statisticsElement.getAttributeValue(ATTRIBUTE_STATISTICS_SERVICE);
+      myStatisticsServiceKey  = statisticsElement.getAttributeValue(ATTRIBUTE_STATISTICS_SERVICE_KEY);
     }
     else {
       myStatisticsSettingsUrl = "http://jetbrains.com/idea/statistics/stat-assistant.xml";
-      myStatisticsServiceUrl = "http://jetbrains.com/idea/statistics/index.jsp";
+      myStatisticsServiceUrl  = "http://jetbrains.com/idea/statistics/index.jsp";
+      myStatisticsServiceKey  = null;
     }
 
     Element thirdPartyElement = parentNode.getChild(ELEMENT_THIRD_PARTY);

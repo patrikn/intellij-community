@@ -156,7 +156,16 @@ public class SelectTemplateStep extends ModuleWizardStep implements SettingsStep
 
   @Override
   public String getHelpId() {
-    return myWizardContext.isCreatingNewProject() ? "New_Project_Main_Settings" : "Add_Module_Main_Settings";
+    String helpId = myWizardContext.isCreatingNewProject() ? "New_Project_Main_Settings" : "Add_Module_Main_Settings";
+    ProjectTemplate projectTemplate = getSelectedTemplate();
+    if (projectTemplate instanceof WebProjectTemplate) {
+      WebProjectTemplate webProjectTemplate = (WebProjectTemplate) projectTemplate;
+      String subHelpId = webProjectTemplate.getHelpId();
+      if (subHelpId != null) {
+        helpId = helpId + ":" + subHelpId;
+      }
+    }
+    return helpId;
   }
 
   private static NamePathComponent initNamePathComponent(WizardContext context) {
@@ -305,7 +314,6 @@ public class SelectTemplateStep extends ModuleWizardStep implements SettingsStep
 
   @Override
   public void addSettingsField(@NotNull String label, @NotNull JComponent field) {
-
     JPanel panel = myWizardContext.isCreatingNewProject() ? myNamePathComponent : myModulePanel;
     addField(label, field, panel);
   }
@@ -321,8 +329,9 @@ public class SelectTemplateStep extends ModuleWizardStep implements SettingsStep
 
   @Override
   public void addSettingsComponent(@NotNull JComponent component) {
-    myNamePathComponent.add(component, new GridBagConstraints(0, GridBagConstraints.RELATIVE, 2, 1, 1.0, 0, GridBagConstraints.NORTHWEST,
-                                                        GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
+    JPanel panel = myWizardContext.isCreatingNewProject() ? myNamePathComponent : myModulePanel;
+    panel.add(component, new GridBagConstraints(0, GridBagConstraints.RELATIVE, 2, 1, 1.0, 0, GridBagConstraints.NORTHWEST,
+                                                   GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
   }
 
   @Override

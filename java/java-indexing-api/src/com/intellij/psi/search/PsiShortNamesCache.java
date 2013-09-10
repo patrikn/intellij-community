@@ -20,8 +20,11 @@ import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.CommonProcessors;
 import com.intellij.util.Processor;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.HashSet;
+import com.intellij.util.indexing.IdFilter;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
@@ -83,6 +86,14 @@ public abstract class PsiShortNamesCache {
    */
   @NotNull
   public abstract String[] getAllClassNames();
+
+  public boolean processAllClassNames(Processor<String> processor) {
+    return ContainerUtil.process(getAllClassNames(), processor);
+  }
+
+  public boolean processAllClassNames(Processor<String> processor, GlobalSearchScope scope, IdFilter filter) {
+    return ContainerUtil.process(getAllClassNames(), processor);
+  }
 
   /**
    * Adds the names of all classes in the project and (optionally) libraries

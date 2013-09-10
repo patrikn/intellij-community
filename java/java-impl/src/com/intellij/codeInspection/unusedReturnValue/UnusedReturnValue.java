@@ -41,18 +41,18 @@ import java.util.List;
 /**
  * @author max
  */
-public class UnusedReturnValue extends GlobalJavaInspectionTool{
+public class UnusedReturnValue extends GlobalJavaBatchInspectionTool{
   private MakeVoidQuickFix myQuickFix;
 
   public boolean IGNORE_BUILDER_PATTERN = false;
 
   @Override
   @Nullable
-  public CommonProblemDescriptor[] checkElement(RefEntity refEntity,
-                                                AnalysisScope scope,
-                                                InspectionManager manager,
-                                                GlobalInspectionContext globalContext,
-                                                ProblemDescriptionsProcessor processor) {
+  public CommonProblemDescriptor[] checkElement(@NotNull RefEntity refEntity,
+                                                @NotNull AnalysisScope scope,
+                                                @NotNull InspectionManager manager,
+                                                @NotNull GlobalInspectionContext globalContext,
+                                                @NotNull ProblemDescriptionsProcessor processor) {
     if (refEntity instanceof RefMethod) {
       final RefMethod refMethod = (RefMethod)refEntity;
 
@@ -90,8 +90,8 @@ public class UnusedReturnValue extends GlobalJavaInspectionTool{
   }
 
   @Override
-  protected boolean queryExternalUsagesRequests(final RefManager manager, final GlobalJavaInspectionContext globalContext,
-                                                final ProblemDescriptionsProcessor processor) {
+  protected boolean queryExternalUsagesRequests(@NotNull final RefManager manager, @NotNull final GlobalJavaInspectionContext globalContext,
+                                                @NotNull final ProblemDescriptionsProcessor processor) {
     manager.iterate(new RefJavaVisitor() {
       @Override public void visitElement(@NotNull RefEntity refEntity) {
         if (refEntity instanceof RefElement && processor.getDescriptions(refEntity) != null) {

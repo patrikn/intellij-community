@@ -69,10 +69,17 @@ public class NonExceptionNameEndsWithExceptionInspection
       this.name = name;
     }
 
+    @Override
     @NotNull
     public String getName() {
       return InspectionGadgetsBundle.message(
         "non.exception.name.ends.with.exception.quickfix", name);
+    }
+
+    @NotNull
+    @Override
+    public String getFamilyName() {
+      return "Make class extend 'Exception'";
     }
 
     @Override

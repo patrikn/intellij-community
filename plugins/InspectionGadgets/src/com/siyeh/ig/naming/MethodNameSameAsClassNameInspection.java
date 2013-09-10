@@ -68,9 +68,16 @@ public class MethodNameSameAsClassNameInspection extends BaseInspection {
   private static class MethodNameSameAsClassNameFix
     extends InspectionGadgetsFix {
 
+    @Override
     @NotNull
     public String getName() {
       return InspectionGadgetsBundle.message("make.method.ctr.quickfix");
+    }
+
+    @NotNull
+    @Override
+    public String getFamilyName() {
+      return getName();
     }
 
     @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2012 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2013 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import com.intellij.psi.util.PsiUtil;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
+import com.siyeh.ig.psiutils.MethodUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,6 +36,8 @@ public class RawUseOfParameterizedTypeInspection extends BaseInspection {
   @SuppressWarnings("PublicField") public boolean ignoreTypeCasts = false;
 
   @SuppressWarnings("PublicField") public boolean ignoreUncompilable = false;
+
+  @SuppressWarnings("PublicField") public boolean ignoreParametersOfOverridingMethods = false;
 
   @Override
   @NotNull
@@ -58,6 +61,8 @@ public class RawUseOfParameterizedTypeInspection extends BaseInspection {
                              "ignoreTypeCasts");
     optionsPanel.addCheckbox(InspectionGadgetsBundle.message("raw.use.of.parameterized.type.ignore.uncompilable.option"),
                              "ignoreUncompilable");
+    optionsPanel.addCheckbox(InspectionGadgetsBundle.message("raw.use.of.parameterized.type.ignore.overridden.parameter.option"),
+                             "ignoreParametersOfOverridingMethods");
     return optionsPanel;
   }
 
@@ -82,6 +87,10 @@ public class RawUseOfParameterizedTypeInspection extends BaseInspection {
       if (ignoreObjectConstruction) {
         return;
       }
+      if (ignoreUncompilable && (expression.getArrayInitializer() != null || expression.getArrayDimensions().length > 0)) {
+        //array creation can (almost) never be generic
+        return;
+      }
       final PsiJavaCodeReferenceElement classReference = expression.getClassOrAnonymousClassReference();
       checkReferenceElement(classReference);
     }
@@ -92,11 +101,11 @@ public class RawUseOfParameterizedTypeInspection extends BaseInspection {
         return;
       }
       final PsiType type = typeElement.getType();
-      if (type instanceof PsiArrayType) {
+      if (!(type instanceof PsiClassType)) {
         return;
       }
       super.visitTypeElement(typeElement);
-      final PsiElement parent = typeElement.getParent();
+      final PsiElement parent = PsiTreeUtil.skipParentsOfType(typeElement, PsiTypeElement.class);
       if (parent instanceof PsiInstanceOfExpression || parent instanceof PsiClassObjectAccessExpression) {
         return;
       }
@@ -113,6 +122,16 @@ public class RawUseOfParameterizedTypeInspection extends BaseInspection {
         final PsiAnnotationMemberValue defaultValue = annotationMethod.getDefaultValue();
         if (defaultValue != null && parent != annotationMethod) {
           return;
+        }
+      }
+      if (parent instanceof PsiParameter && ignoreParametersOfOverridingMethods) {
+        final PsiParameter parameter = (PsiParameter)parent;
+        final PsiElement declarationScope = parameter.getDeclarationScope();
+        if (declarationScope instanceof PsiMethod) {
+          final PsiMethod method = (PsiMethod)declarationScope;
+          if (MethodUtils.hasSuper(method)) {
+            return;
+          }
         }
       }
       final PsiJavaCodeReferenceElement referenceElement = typeElement.getInnermostComponentReferenceElement();
@@ -164,11 +183,7 @@ public class RawUseOfParameterizedTypeInspection extends BaseInspection {
     }
 
     private boolean hasNeededLanguageLevel(PsiElement element) {
-      if (element.getLanguage() != JavaLanguage.INSTANCE) {
-        return false;
-      }
-      return PsiUtil.isLanguageLevel5OrHigher(element);
+      return element.getLanguage().isKindOf(JavaLanguage.INSTANCE) && PsiUtil.isLanguageLevel5OrHigher(element);
     }
   }
 }
-

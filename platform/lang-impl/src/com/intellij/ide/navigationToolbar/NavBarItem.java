@@ -37,7 +37,7 @@ public class NavBarItem extends SimpleColoredComponent implements Disposable {
   private final int myIndex;
   private final Icon myIcon;
   private final NavBarPanel myPanel;
-  private Object myObject;
+  private final Object myObject;
   private final boolean isPopupElement;
   private final NavBarUI myUI;
 
@@ -63,7 +63,6 @@ public class NavBarItem extends SimpleColoredComponent implements Disposable {
     Disposer.register(parent == null ? panel : parent, this);
 
     setOpaque(false);
-    setFont(myUI.getElementFont(this));
     setIpad(myUI.getElementIpad(isPopupElement));
 
     if (!isPopupElement) {
@@ -93,6 +92,11 @@ public class NavBarItem extends SimpleColoredComponent implements Disposable {
 
   public String getText() {
     return myText;
+  }
+
+  @Override
+  public Font getFont() {
+    return myUI == null ? super.getFont() : myUI.getElementFont(this);
   }
 
   void update() {

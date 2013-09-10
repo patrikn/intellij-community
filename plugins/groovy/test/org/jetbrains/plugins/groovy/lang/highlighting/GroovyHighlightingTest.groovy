@@ -568,7 +568,7 @@ int method(x, y, z) {
         42
     }
     else if (z) {
-      return <error descr="Cannot assign 'String' to 'int'">'abc'</error>
+      <error descr="Cannot assign 'String' to 'int'">return</error> 'abc'
     }
     else {
       return 43
@@ -788,8 +788,8 @@ class A {
   class B {}
 }
 
-A.B foo = new <error descr="Cannot reference non-static symbol 'A.B' from static context">A.B</error>()
-''')
+A.B foo = new A.<warning descr="Cannot reference non-static symbol 'A.B' from static context">B</warning>()
+''', GrUnresolvedAccessInspection)
   }
 
   void testDuplicatedVar0() {
@@ -1120,7 +1120,7 @@ print(<error descr="Collection literal contains named and expression arguments a
 ''')
   }
 
-  void testDelegatesToApplicability() {
+  void _testDelegatesToApplicability() {
     testHighlighting('''
       def with(@DelegatesTo.Target Object target, @DelegatesTo Closure arg) {
         arg.delegate = target
@@ -1368,5 +1368,236 @@ def bar
 ''')
   }
 
+ void testFinalFieldRewrite() {
+   testHighlighting('''\
+class A {
+  final foo = 1
 
+  def A() {
+    foo = 2 //no error
+  }
+
+  def foo() {
+    <error descr="Cannot assign a value to final field 'foo'">foo</error> = 2
+  }
+}
+
+new A().foo = 2 //no error
+''')
+ }
+
+  void testStaticFinalFieldRewrite() {
+    testHighlighting('''\
+class A {
+  static final foo = 1
+
+  def A() {
+    <error descr="Cannot assign a value to final field 'foo'">foo</error> = 2
+  }
+
+  static {
+    foo = 2 //no error
+  }
+
+  def foo() {
+    <error descr="Cannot assign a value to final field 'foo'">foo</error> = 2
+  }
+
+  static def bar() {
+    <error descr="Cannot assign a value to final field 'foo'">foo</error> = 2
+  }
+}
+
+A.foo = 3 //no error
+''')
+  }
+
+  void testSOEIfExtendsItself() {
+    testHighlighting('''\
+<error descr="Cyclic inheritance involving 'A'"><error descr="Method 'invokeMethod' is not implemented">class A extends A</error></error> {
+  def foo
+}
+
+<error descr="Cyclic inheritance involving 'B'"><error descr="Method 'invokeMethod' is not implemented">class B extends C</error></error> {
+  def foo
+}
+
+<error descr="Cyclic inheritance involving 'C'"><error descr="Method 'invokeMethod' is not implemented">class C extends B</error></error> {
+}
+''')
+  }
+
+  void testFinalParameter() {
+    testHighlighting('''\
+def foo0(final i) {
+  <error descr="Cannot assign a value to final parameter 'i'">i</error> = 5
+  print i
+}
+
+def foo1(i) {
+  i = 5
+  print i
+}
+
+def foo2(final i = 4) {
+  <error descr="Cannot assign a value to final parameter 'i'">i</error> = 5
+  print i
+}
+
+def foo3(final i) {
+  print i
+}
+''')
+  }
+
+  void testNonStaticInnerClass1() {
+    testHighlighting('''\
+class MyController {
+     static def list() {
+         def myInnerClass = new MyCommand.<error descr="Cannot reference non-static symbol 'MyCommand.MyInnerClass' from static context">MyInnerClass</error>()
+         print myInnerClass
+    }
+}
+
+class MyCommand {
+    class MyInnerClass {
+    }
+}
+''', GrUnresolvedAccessInspection)
+  }
+
+  void testNonStaticInnerClass2() {
+    testHighlighting('''\
+class MyController {
+     def list() {
+         def myInnerClass = new MyCommand.<warning descr="Cannot reference non-static symbol 'MyCommand.MyInnerClass' from static context">MyInnerClass</warning>()
+         print myInnerClass
+    }
+}
+
+class MyCommand {
+    class MyInnerClass {
+    }
+}
+''', GrUnresolvedAccessInspection)
+  }
+
+  void testNonStaticInnerClass3() {
+    myFixture.configureByText('_.groovy', '''\
+class MyController {
+     static def list() {
+         def myInnerClass = new MyCommand.<error descr="Cannot reference non-static symbol 'MyCommand.MyInnerClass' from static context">MyInnerClass</error>()
+         print myInnerClass
+    }
+}
+
+class MyCommand {
+    class MyInnerClass {
+    }
+}
+''')
+
+    myFixture.enableInspections(GrUnresolvedAccessInspection)
+
+    GrUnresolvedAccessInspection.getInstance(myFixture.file, myFixture.project).myHighlightInnerClasses = false
+    myFixture.testHighlighting(true, false, true)
+  }
+
+  void testNonStaticInnerClass4() {
+    myFixture.configureByText('_.groovy', '''\
+class MyController {
+     def list() {
+         def myInnerClass = new MyCommand.MyInnerClass()
+         print myInnerClass
+    }
+}
+
+class MyCommand {
+    class MyInnerClass {
+    }
+}
+''')
+
+    myFixture.enableInspections(GrUnresolvedAccessInspection)
+
+    GrUnresolvedAccessInspection.getInstance(myFixture.file, myFixture.project).myHighlightInnerClasses = false
+    myFixture.testHighlighting(true, false, true)
+  }
+
+  void testInnerClassWithStaticMethod() {
+    testHighlighting('''\
+class A {
+    class B {
+        static foo() {}
+
+        static bar() {
+            B.foo() //correct
+        }
+    }
+
+    static foo() {
+      new <error descr="Cannot reference non-static symbol 'A.B' from static context">B</error>()
+    }
+}
+''')
+  }
+
+  void testUnresolvedPropertyWhenGetPropertyDeclared() {
+    myFixture.enableInspections(GrUnresolvedAccessInspection)
+    myFixture.configureByText('_.groovy', '''\
+class DelegatesToTest {
+    void ideSupport() {
+        define {
+            a //delegatesTo provides getProperty from DslDelegate
+        }
+    }
+
+    private static void define(@DelegatesTo(DslDelegate) Closure dsl) {
+    }
+}
+
+class DslDelegate {
+    def getProperty(String name) {
+        {->print 1}
+    }
+
+
+    def ab() {
+        print a  //getPropertyDeclared
+        <warning descr="Cannot resolve symbol 'a'">a</warning>()      //unresolved
+    }
+}
+
+print new DslDelegate().foo   //resolved
+print new DslDelegate().<warning descr="Cannot resolve symbol 'foo'">foo</warning>() //unresolved
+''')
+
+    GrUnresolvedAccessInspection.getInstance(myFixture.file, myFixture.project).myHighlightIfGroovyObjectOverridden = false
+    myFixture.testHighlighting(true, false, true)
+  }
+
+  void testImplementInaccessibleAbstractMethod() {
+    myFixture.addClass('''\
+package p;
+
+public abstract class Base {
+  abstract void foo();
+}
+''')
+    testHighlighting('''\
+<error>class Foo extends p.Base</error> {
+}
+''')
+  }
+
+  void testInjectedLiterals() {
+    testHighlighting("""\
+//language=Groovy
+def groovy1 = '''print 'abc\\' '''
+
+//language=Groovy
+def groovy2 = '''print <error descr="String end expected">'abc\\\\' </error>'''
+
+""")
+  }
 }

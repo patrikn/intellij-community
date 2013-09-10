@@ -17,23 +17,28 @@ package com.intellij.xdebugger.impl.frame;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.ui.AppUIUtil;
 import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XDebugSessionAdapter;
-import com.intellij.xdebugger.impl.ui.DebuggerUIUtil;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * @author nik
  */
 public abstract class XDebugViewBase implements Disposable {
   protected enum SessionEvent {PAUSED, BEFORE_RESUME, RESUMED, STOPPED, FRAME_CHANGED, SETTINGS_CHANGED}
+
   protected final XDebugSession mySession;
   private final MyDebugSessionListener mySessionListener;
 
-  public XDebugViewBase(final XDebugSession session, Disposable parentDisposable) {
+  public XDebugViewBase(@NotNull final XDebugSession session, @Nullable Disposable parentDisposable) {
     mySession = session;
     mySessionListener = new MyDebugSessionListener();
     mySession.addSessionListener(mySessionListener);
-    Disposer.register(parentDisposable, this);
+    if (parentDisposable != null) {
+      Disposer.register(parentDisposable, this);
+    }
   }
 
   public void rebuildView() {
@@ -41,36 +46,43 @@ public abstract class XDebugViewBase implements Disposable {
   }
 
   private void onSessionEvent(final SessionEvent event) {
-    DebuggerUIUtil.invokeOnEventDispatchIfProjectNotDisposed(new Runnable() {
+    AppUIUtil.invokeLaterIfProjectAlive(mySession.getProject(), new Runnable() {
+      @Override
       public void run() {
         rebuildView(event);
       }
-    }, mySession.getProject());
+    });
   }
 
   protected abstract void rebuildView(final SessionEvent event);
 
+  @Override
   public void dispose() {
     mySession.removeSessionListener(mySessionListener);
   }
 
   private class MyDebugSessionListener extends XDebugSessionAdapter {
+    @Override
     public void sessionPaused() {
       onSessionEvent(SessionEvent.PAUSED);
     }
 
+    @Override
     public void sessionResumed() {
       onSessionEvent(SessionEvent.RESUMED);
     }
 
+    @Override
     public void sessionStopped() {
       onSessionEvent(SessionEvent.STOPPED);
     }
 
+    @Override
     public void stackFrameChanged() {
       onSessionEvent(SessionEvent.FRAME_CHANGED);
     }
 
+    @Override
     public void beforeSessionResume() {
       onSessionEvent(SessionEvent.BEFORE_RESUME);
     }

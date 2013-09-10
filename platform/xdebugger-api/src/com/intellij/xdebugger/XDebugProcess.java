@@ -16,7 +16,6 @@
 
 package com.intellij.xdebugger;
 
-import com.intellij.execution.filters.TextConsoleBuilder;
 import com.intellij.execution.filters.TextConsoleBuilderFactory;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.ui.ExecutionConsole;
@@ -26,6 +25,7 @@ import com.intellij.xdebugger.breakpoints.XBreakpointHandler;
 import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider;
 import com.intellij.xdebugger.frame.XValueMarkerProvider;
 import com.intellij.xdebugger.stepping.XSmartStepIntoHandler;
+import com.intellij.xdebugger.ui.XDebugTabLayouter;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -160,8 +160,7 @@ public abstract class XDebugProcess {
 
   @NotNull
   public ExecutionConsole createConsole() {
-    final TextConsoleBuilder consoleBuilder = TextConsoleBuilderFactory.getInstance().createBuilder(getSession().getProject());
-    return consoleBuilder.getConsole();
+    return TextConsoleBuilderFactory.getInstance().createBuilder(getSession().getProject()).getConsole();
   }
 
   /**
@@ -174,8 +173,9 @@ public abstract class XDebugProcess {
   }
 
   /**
-   * Override this method to provide additional tabs for 'Debug' tool window
+   * @deprecated override {@link #createTabLayouter()} and {@link com.intellij.xdebugger.ui.XDebugTabLayouter#registerAdditionalContent} instead
    */
+  @Deprecated
   public void registerAdditionalContent(@NotNull RunnerLayoutUi ui) {
   }
 
@@ -196,4 +196,26 @@ public abstract class XDebugProcess {
   public HyperlinkListener getCurrentStateHyperlinkListener() {
     return null;
   }
+
+  /**
+   * Override this method to customize content of tab in 'Debug' tool window
+   */
+  @NotNull
+  public XDebugTabLayouter createTabLayouter() {
+    return new XDebugTabLayouter() {
+      @Override
+      public void registerAdditionalContent(@NotNull RunnerLayoutUi ui) {
+        XDebugProcess.this.registerAdditionalContent(ui);
+      }
+    };
+  }
+
+  /**
+   * Add or not SortValuesAction (alphabetically sort)
+   * @todo this action should be moved to "Variables" as gear action
+   */
+  public boolean isValuesCustomSorted() {
+    return false;
+  }
+
 }

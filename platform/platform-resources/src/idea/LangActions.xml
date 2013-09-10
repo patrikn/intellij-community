@@ -391,7 +391,6 @@
 
     <group id="ProjectViewPopupMenuModifyGroup">
       <reference ref="$Delete"/>
-      <action id="ExcludeFromProject" class="com.intellij.openapi.file.exclude.ui.ExcludeFromProjectAction"/>
       <group id="MarkFileAs" class="com.intellij.openapi.file.exclude.ui.MarkFileGroup">
         <action id="MarkAsPlainTextAction" class="com.intellij.openapi.file.exclude.ui.MarkAsPlainTextAction"/>
         <action id="MarkAsOriginalTypeAction" class="com.intellij.openapi.file.exclude.ui.MarkAsOriginalTypeAction"/>
@@ -572,6 +571,7 @@
       <reference ref="AddAllToFavorites"/>
       <separator/>
       <reference ref="RunContextPopupGroup"/>
+      <separator/>
       <reference ref="VersionControlsGroup"/>
       <separator/>
       <reference ref="ExternalToolsGroup"/>
@@ -652,6 +652,7 @@
       <action id="XDebugger.CopyName" class="com.intellij.xdebugger.impl.ui.tree.actions.XCopyNameAction"/>
       <action id="XDebugger.Inspect" class="com.intellij.xdebugger.impl.ui.tree.actions.XInspectAction"/>
       <action id="XDebugger.JumpToSource" class="com.intellij.xdebugger.impl.ui.tree.actions.XJumpToSourceAction"/>
+      <action id="XDebugger.JumpToTypeSource" class="com.intellij.xdebugger.impl.ui.tree.actions.XJumpToTypeSourceAction"/>
       <action id="XDebugger.AddToWatches" class="com.intellij.xdebugger.impl.ui.tree.actions.XAddToWatchesAction" icon="AllIcons.Debugger.AddToWatch"/>
       <action id="XDebugger.NewWatch" class="com.intellij.xdebugger.impl.frame.actions.XNewWatchAction" icon="AllIcons.Debugger.NewWatch"/>
       <action id="XDebugger.EditWatch" class="com.intellij.xdebugger.impl.frame.actions.XEditWatchAction"/>
@@ -701,6 +702,7 @@
     <group id="XDebugger.Variables.Tree.Popup">
       <reference ref="XDebugger.ValueGroup"/>
       <reference ref="XDebugger.JumpToSource"/>
+      <reference ref="XDebugger.JumpToTypeSource"/>
       <reference ref="XDebugger.AddToWatches"/>
     </group>
 
@@ -721,10 +723,6 @@
     </group>
 
     <group id="XDebugger.Inspect.Tree.Popup">
-      <reference ref="XDebugger.ValueGroup"/>
-    </group>
-
-    <group id="XDebugger.Value.Hint.Tree.Popup">
       <reference ref="XDebugger.ValueGroup"/>
       <reference ref="XDebugger.AddToWatches"/>
     </group>

@@ -38,6 +38,8 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.StandardFileSystems;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.util.Function;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.HashMap;
 import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.StringInterner;
@@ -136,9 +138,9 @@ public abstract class ModuleManagerImpl extends ModuleManager implements Project
       }
     });
 
-    private void setModuleGroupPath(ModifiableModuleModel model, Module module, String[] group) {
-      String[] cached = paths.get(group);
-      if (cached == null) {
+    private void setModuleGroupPath(@NotNull ModifiableModuleModel model, Module module, @Nullable String[] group) {
+      String[] cached = group == null ? null : paths.get(group);
+      if (cached == null && group != null) {
         cached = new String[group.length];
         for (int i = 0; i < group.length; i++) {
           String g = group[i];
@@ -169,7 +171,7 @@ public abstract class ModuleManagerImpl extends ModuleManager implements Project
           myModulePaths.remove(correspondingPath);
 
           String groupStr = correspondingPath.getModuleGroup();
-          String[] group = groupStr != null ? groupStr.split(MODULE_GROUP_SEPARATOR) : null;
+          String[] group = groupStr == null ? null : groupStr.split(MODULE_GROUP_SEPARATOR);
           if (!Arrays.equals(group, model.getModuleGroupPath(existingModule))) {
             groupInterner.setModuleGroupPath(model, existingModule, group);
           }
@@ -302,9 +304,14 @@ public abstract class ModuleManagerImpl extends ModuleManager implements Project
     myMessageBus.syncPublisher(ProjectTopics.MODULES).beforeModuleRemoved(myProject, module);
   }
 
-  protected void fireModulesRenamed(List<Module> modules) {
+  protected void fireModulesRenamed(List<Module> modules, final Map<Module, String> oldNames) {
     if (!modules.isEmpty()) {
-      myMessageBus.syncPublisher(ProjectTopics.MODULES).modulesRenamed(myProject, modules);
+      myMessageBus.syncPublisher(ProjectTopics.MODULES).modulesRenamed(myProject, modules, new Function<Module, String>() {
+        @Override
+        public String fun(Module module) {
+          return oldNames.get(module);
+        }
+      });
     }
   }
 
@@ -914,7 +921,7 @@ public abstract class ModuleManagerImpl extends ModuleManager implements Project
     }
 
     @Override
-    public void setModuleGroupPath(Module module, String[] groupPath) {
+    public void setModuleGroupPath(@NotNull Module module, @Nullable("null means remove") String[] groupPath) {
       if (myModuleGroupPath == null) {
         myModuleGroupPath = new THashMap<Module, String[]>();
       }
@@ -927,7 +934,7 @@ public abstract class ModuleManagerImpl extends ModuleManager implements Project
     }
 
     @Override
-    public void setModuleFilePath(Module module, String oldPath, String newFilePath) {
+    public void setModuleFilePath(@NotNull Module module, String oldPath, String newFilePath) {
       myPathToModule.remove(oldPath);
       myPathToModule.put(newFilePath, module);
     }
@@ -966,13 +973,15 @@ public abstract class ModuleManagerImpl extends ModuleManager implements Project
         final Map<Module, String> modulesToNewNamesMap = moduleModel.myModuleToNewName;
         final Set<Module> modulesToBeRenamed = modulesToNewNamesMap.keySet();
         modulesToBeRenamed.removeAll(moduleModel.myModulesToDispose);
-        final List<Module> modules = new ArrayList<Module>();
-        for (final Module moduleToBeRenamed : modulesToBeRenamed) {
-          ModuleEx module = (ModuleEx)moduleToBeRenamed;
-          moduleModel.myPathToModule.remove(moduleToBeRenamed.getModuleFilePath());
-          modules.add(moduleToBeRenamed);
-          module.rename(modulesToNewNamesMap.get(moduleToBeRenamed));
-          moduleModel.myPathToModule.put(moduleToBeRenamed.getModuleFilePath(), module);
+
+        List<Module> modules = new ArrayList<Module>();
+        Map<Module, String> oldNames = ContainerUtil.newHashMap();
+        for (final Module module : modulesToBeRenamed) {
+          oldNames.put(module, module.getName());
+          moduleModel.myPathToModule.remove(module.getModuleFilePath());
+          modules.add(module);
+          ((ModuleEx)module).rename(modulesToNewNamesMap.get(module));
+          moduleModel.myPathToModule.put(module.getModuleFilePath(), module);
         }
 
         moduleModel.myIsWritable = false;
@@ -992,17 +1001,17 @@ public abstract class ModuleManagerImpl extends ModuleManager implements Project
           cleanCachedStuff();
         }
         cleanCachedStuff();
-        fireModulesRenamed(modules);
+        fireModulesRenamed(modules, oldNames);
         cleanCachedStuff();
       }
     }, false, true);
   }
 
-  void fireModuleRenamedByVfsEvent(@NotNull final Module module) {
+  void fireModuleRenamedByVfsEvent(@NotNull final Module module, @NotNull final String oldName) {
     ProjectRootManagerEx.getInstanceEx(myProject).makeRootsChange(new Runnable() {
       @Override
       public void run() {
-        fireModulesRenamed(Collections.singletonList(module));
+        fireModulesRenamed(Collections.singletonList(module), Collections.singletonMap(module, oldName));
       }
     }, false, true);
   }

@@ -18,7 +18,6 @@ package org.zmlx.hg4idea.action;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.update.UpdatedFiles;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -44,7 +43,9 @@ import java.util.Collection;
 public class HgMerge extends HgAbstractGlobalAction {
 
   @Override
-  public void execute(final Project project, final Collection<VirtualFile> repos, @Nullable final VirtualFile selectedRepo) {
+  public void execute(@NotNull final Project project,
+                      @NotNull final Collection<VirtualFile> repos,
+                      @Nullable final VirtualFile selectedRepo) {
     HgUiUtil.loadBranchesInBackgroundableAndExecuteAction(project, repos, new Consumer<HgBranchesAndTags>() {
 
       @Override
@@ -95,6 +96,12 @@ public class HgMerge extends HgAbstractGlobalAction {
       incomingRevision = tag.getHead();
     }
 
+    HgTagBranch bookmark = dialog.getBookmark();
+    if (bookmark != null) {
+      hgMergeCommand.setRevision(bookmark.getName());
+      incomingRevision = bookmark.getHead();
+    }
+
     String revision = dialog.getRevision();
     if (revision != null) {
       hgMergeCommand.setRevision(revision);
@@ -109,16 +116,8 @@ public class HgMerge extends HgAbstractGlobalAction {
 
     if (incomingRevision != null) {
       try {
-        String warnings = new HgHeadMerger(project, hgMergeCommand)
-          .merge(repo, updatedFiles, incomingRevision).getWarnings();
-
-        if (!StringUtil.isEmptyOrSpaces(warnings)) {
-          //noinspection ThrowableInstanceNeverThrown
-          VcsException warning = new VcsException(warnings);
-          warning.setIsWarning(true);
-          notifier.notifyWarning("Warnings during merge", warnings);
-        }
-
+        new HgHeadMerger(project, hgMergeCommand)
+          .merge(repo, updatedFiles, incomingRevision);
         new HgConflictResolver(project, updatedFiles).resolve(repo);
       }
       catch (VcsException e) {

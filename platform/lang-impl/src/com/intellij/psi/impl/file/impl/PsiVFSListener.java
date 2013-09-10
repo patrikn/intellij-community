@@ -208,7 +208,7 @@ public class PsiVFSListener extends VirtualFileAdapter {
 
     VirtualFile parent = vFile.getParent();
     final PsiDirectory parentDir = getCachedDirectory(parent);
-    if (parentDir == null) return; // do not notifyListeners event if parent directory was never accessed via PSI
+    if (parent != null && parentDir == null) return; // do not notifyListeners event if parent directory was never accessed via PSI
 
     ApplicationManager.getApplication().runWriteAction(
       new ExternalChangeAction() {
@@ -219,6 +219,8 @@ public class PsiVFSListener extends VirtualFileAdapter {
 
           if (VirtualFile.PROP_NAME.equals(propertyName)) {
             final String newName = (String)event.getNewValue();
+
+            if (parentDir == null) return;
 
             if (vFile.isDirectory()) {
               PsiDirectory psiDir = myFileManager.findDirectory(vFile);
@@ -303,7 +305,7 @@ public class PsiVFSListener extends VirtualFileAdapter {
     final String propertyName = event.getPropertyName();
     final VirtualFile vFile = event.getFile();
 
-    final FileViewProvider oldFileViewProvider = myFileManager.findViewProvider(vFile);
+    final FileViewProvider oldFileViewProvider = myFileManager.findCachedViewProvider(vFile);
     final PsiFile oldPsiFile;
     if (oldFileViewProvider instanceof SingleRootFileViewProvider) {
       oldPsiFile = ((SingleRootFileViewProvider)oldFileViewProvider).getCachedPsi(oldFileViewProvider.getBaseLanguage());
@@ -513,12 +515,11 @@ public class PsiVFSListener extends VirtualFileAdapter {
                                   ? myFileManager.getCachedDirectory(vFile)
                                   : myFileManager.getCachedPsiFileInner(vFile);
     myFileManager.removeInvalidFilesAndDirs(true);
-    final FileViewProvider viewProvider = myFileManager.findViewProvider(vFile);
     final PsiElement newElement;
     final FileViewProvider newViewProvider;
     if (!vFile.isDirectory()){
       newViewProvider = myFileManager.createFileViewProvider(vFile, true);
-      newElement = newViewProvider.getPsi(viewProvider.getBaseLanguage());
+      newElement = newViewProvider.getPsi(myFileManager.findViewProvider(vFile).getBaseLanguage());
     }
     else {
       newElement = myFileManager.findDirectory(vFile);

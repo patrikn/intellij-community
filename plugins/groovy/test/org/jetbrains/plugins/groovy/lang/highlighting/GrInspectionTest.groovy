@@ -207,6 +207,22 @@ print foo+<warning descr="Access to 'bar' exceeds its access rights">bar</warnin
 ''', GroovyAccessibilityInspection)
   }
 
+  public void testStaticImportCapsProperty() {
+    myFixture.addFileToProject('Foo.groovy', '''\
+class Foo {
+  static def FOO = 2
+  private static def BAR = 2
+}
+''')
+    testHighlighting('''\
+import static Foo.FOO
+import static Foo.<warning descr="Access to 'BAR' exceeds its access rights">BAR</warning>
+
+print FOO + <warning descr="Access to 'BAR' exceeds its access rights">BAR</warning>
+''', GroovyAccessibilityInspection)
+  }
+
+
   public void testUntypedAccess() { doTest(new GroovyUntypedAccessInspection()) }
 
   public void testMethodMayBeStaticForCategoryClasses() {
@@ -224,5 +240,41 @@ class I{
     }
 }
 ''', GrMethodMayBeStaticInspection)
+  }
+
+  void testDelegatesTo() {
+    testHighlighting('''
+
+def with1(@DelegatesTo.Target() Object target, @DelegatesTo() Closure arg) { //unused
+    arg.delegate = target
+    arg()
+}
+
+def with2(@<warning descr="@Target is unused">DelegatesTo.Target</warning>('abc') Object target, @DelegatesTo() Closure arg) { //unused
+    arg.delegate = target
+    arg()
+}
+
+def with3(@DelegatesTo.Target('abc') Object target, @DelegatesTo(target='abc') Closure arg) { //unused
+    arg.delegate = target
+    arg()
+}
+
+def with4(@<warning descr="@Target is unused">DelegatesTo.Target</warning>('abcd') Object target, @DelegatesTo(target=<warning descr="Target 'abc' does not exist">'abc'</warning>) Closure arg) { //unused
+    arg.delegate = target
+    arg()
+}
+
+def with5(@<warning descr="@Target is unused">DelegatesTo.Target</warning>() Object target, @DelegatesTo(target=<warning descr="Target 'abc' does not exist">'abc'</warning>) Closure arg) { //unused
+    arg.delegate = target
+    arg()
+}
+
+def with6(@<warning descr="@Target is unused">DelegatesTo.Target</warning>() Object target, @DelegatesTo(String) Closure arg) {
+    arg.delegate = target
+    arg()
+}
+
+''', DelegatesToInspection)
   }
 }

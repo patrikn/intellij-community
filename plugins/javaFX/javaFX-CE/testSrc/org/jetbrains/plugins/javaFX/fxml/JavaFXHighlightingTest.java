@@ -245,6 +245,10 @@ public class JavaFXHighlightingTest extends AbstractJavaFXTestCase {
     doTest();
   }
 
+  public void testReadOnly1() throws Exception {
+    doTest();
+  }
+
   public void testScriptSource() throws Exception {
     doTest("s1.js");
   }
@@ -308,6 +312,10 @@ public class JavaFXHighlightingTest extends AbstractJavaFXTestCase {
   }
 
   public void testCopyReference() throws Exception {
+    doTest();
+  }
+
+  public void testConstantValue() throws Exception {
     doTest();
   }
 

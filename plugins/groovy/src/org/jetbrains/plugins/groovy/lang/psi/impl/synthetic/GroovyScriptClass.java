@@ -18,6 +18,8 @@ package org.jetbrains.plugins.groovy.lang.psi.impl.synthetic;
 import com.intellij.navigation.ItemPresentation;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.util.io.FileUtilRt;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.*;
 import com.intellij.psi.impl.light.LightElement;
@@ -27,6 +29,7 @@ import com.intellij.psi.javadoc.PsiDocComment;
 import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
+import com.intellij.psi.util.PsiUtil;
 import com.intellij.ui.RowIcon;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
@@ -48,23 +51,16 @@ import java.util.List;
  */
 public class GroovyScriptClass extends LightElement implements PsiClass, SyntheticElement {
   private final GroovyFile myFile;
-  private final PsiMethod myMainMethod;
-  private final PsiMethod myRunMethod;
+  private volatile PsiMethod myMainMethod = null;
+  private volatile PsiMethod myRunMethod = null;
+
+  private volatile boolean myInitialized = false;
 
   private final LightModifierList myModifierList;
 
   public GroovyScriptClass(GroovyFile file) {
     super(file.getManager(), file.getLanguage());
     myFile = file;
-    myMainMethod = new LightMethodBuilder(getManager(), GroovyFileType.GROOVY_LANGUAGE, "main").
-      setContainingClass(this).
-      setMethodReturnType(PsiType.VOID).
-      addParameter("args", new PsiArrayType(PsiType.getJavaLangString(getManager(), getResolveScope()))).
-      addModifiers(PsiModifier.PUBLIC, PsiModifier.STATIC);
-    myRunMethod = new LightMethodBuilder(getManager(), GroovyFileType.GROOVY_LANGUAGE, "run").
-      setContainingClass(this).
-      setMethodReturnType(PsiType.getJavaLangObject(getManager(), getResolveScope())).
-      addModifier(PsiModifier.PUBLIC);
 
     myModifierList = new LightModifierList(myManager, GroovyFileType.GROOVY_LANGUAGE, PsiModifier.PUBLIC);
   }
@@ -105,14 +101,17 @@ public class GroovyScriptClass extends LightElement implements PsiClass, Synthet
     return myFile.isValid() && myFile.isScript();
   }
 
-  @NotNull
+  @Nullable
   public String getQualifiedName() {
+    final String name = getName();
+    if (name == null) return null;
+
     final String packName = myFile.getPackageName();
     if (packName.length() == 0) {
-      return getName();
+      return name;
     }
     else {
-      return packName + "." + getName();
+      return packName + "." + name;
     }
   }
 
@@ -201,10 +200,14 @@ public class GroovyScriptClass extends LightElement implements PsiClass, Synthet
 
   @NotNull
   public PsiMethod[] getMethods() {
-    return CachedValuesManager.getManager(getProject()).getCachedValue(this, new CachedValueProvider<PsiMethod[]>() {
+    return CachedValuesManager.getCachedValue(this, new CachedValueProvider<PsiMethod[]>() {
       @Nullable
       @Override
       public Result<PsiMethod[]> compute() {
+        if (!myInitialized) {
+          initMethods();
+        }
+
         PsiMethod[] methods = myFile.getMethods();
 
         byte hasMain = 1;
@@ -225,6 +228,21 @@ public class GroovyScriptClass extends LightElement implements PsiClass, Synthet
         return Result.create(result, myFile);
       }
     });
+  }
+
+  private synchronized void initMethods() {
+    if (myInitialized) return;
+    myMainMethod = new LightMethodBuilder(getManager(), GroovyFileType.GROOVY_LANGUAGE, "main").
+      setContainingClass(this).
+      setMethodReturnType(PsiType.VOID).
+      addParameter("args", new PsiArrayType(PsiType.getJavaLangString(getManager(), getResolveScope()))).
+      addModifiers(PsiModifier.PUBLIC, PsiModifier.STATIC);
+    myRunMethod = new LightMethodBuilder(getManager(), GroovyFileType.GROOVY_LANGUAGE, "run").
+      setContainingClass(this).
+      setMethodReturnType(PsiType.getJavaLangObject(getManager(), getResolveScope())).
+      addModifier(PsiModifier.PUBLIC);
+
+    myInitialized = true;
   }
 
   @NotNull
@@ -327,11 +345,16 @@ public class GroovyScriptClass extends LightElement implements PsiClass, Synthet
     return InheritanceImplUtil.isInheritor(this, baseClass, checkDeep);
   }
 
-  @NotNull
+  @Nullable
   public String getName() {
-    String name = myFile.getName();
-    int i = name.indexOf('.');
-    return i > 0 ? name.substring(0, i) : name;
+    String fileName = myFile.getName();
+    final String name = FileUtilRt.getNameWithoutExtension(fileName);
+    if (StringUtil.isJavaIdentifier(name)) {
+      return name;
+    }
+    else {
+      return null;
+    }
   }
 
   public PsiElement setName(@NotNull String name) throws IncorrectOperationException {
@@ -359,7 +382,8 @@ public class GroovyScriptClass extends LightElement implements PsiClass, Synthet
                                      @NotNull final ResolveState state,
                                      @Nullable PsiElement lastParent,
                                      @NotNull PsiElement place) {
-    return PsiClassImplUtil.processDeclarationsInClass(this, processor, state, ContainerUtil.<PsiClass>newHashSet(), lastParent, place, false);
+    return PsiClassImplUtil.processDeclarationsInClass(this, processor, state, ContainerUtil.<PsiClass>newHashSet(), lastParent, place,
+                                                       PsiUtil.getLanguageLevel(place), false);
   }
 
   @Override
@@ -371,7 +395,8 @@ public class GroovyScriptClass extends LightElement implements PsiClass, Synthet
   public ItemPresentation getPresentation() {
     return new ItemPresentation() {
       public String getPresentableText() {
-        return getName();
+        final String name = getName();
+        return name != null ? name : "<unnamed>";
       }
 
       public String getLocationString() {

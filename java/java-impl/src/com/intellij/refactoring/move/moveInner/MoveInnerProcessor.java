@@ -16,7 +16,8 @@
 package com.intellij.refactoring.move.moveInner;
 
 import com.intellij.codeInsight.ChangeContextUtil;
-import com.intellij.codeInsight.CodeInsightUtilBase;
+import com.intellij.codeInsight.CodeInsightUtilCore;
+import com.intellij.lang.findUsages.DescriptiveNameUtil;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
@@ -39,7 +40,6 @@ import com.intellij.refactoring.rename.RenameUtil;
 import com.intellij.refactoring.util.*;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.usageView.UsageViewDescriptor;
-import com.intellij.usageView.UsageViewUtil;
 import com.intellij.util.Function;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.VisibilityUtil;
@@ -164,14 +164,14 @@ public class MoveInnerProcessor extends BaseRefactoringProcessor {
       if (myParameterNameOuterClass != null) {
         // pass outer as a parameter
         field = factory.createField(myFieldNameOuterClass, factory.createType(myOuterClass));
-        field = (PsiField)myInnerClass.add(field);
+        field = addOuterField(field);
         myInnerClass = field.getContainingClass();
         addFieldInitializationToConstructors(myInnerClass, field, myParameterNameOuterClass);
       }
 
       ChangeContextUtil.encodeContextInfo(myInnerClass, false);
 
-      myInnerClass = CodeInsightUtilBase.forcePsiPostprocessAndRestoreElement(myInnerClass);
+      myInnerClass = CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(myInnerClass);
 
       final MoveInnerOptions moveInnerOptions = new MoveInnerOptions(myInnerClass, myOuterClass, myTargetContainer, myNewClassName);
       final MoveInnerHandler handler = MoveInnerHandler.EP_NAME.forLanguage(myInnerClass.getLanguage());
@@ -296,6 +296,19 @@ public class MoveInnerProcessor extends BaseRefactoringProcessor {
     }
   }
 
+  private PsiField addOuterField(PsiField field) {
+    final PsiMember[] members = PsiTreeUtil.getChildrenOfType(myInnerClass, PsiMember.class);
+    if (members != null) {
+      for (PsiMember member : members) {
+        if (!member.hasModifierProperty(PsiModifier.STATIC)) {
+          return (PsiField)myInnerClass.addBefore(field, member);
+        }
+      }
+    }
+
+    return (PsiField)myInnerClass.add(field);
+  }
+
   protected void performPsiSpoilingRefactoring() {
     if (myNonCodeUsages != null) {
       RenameUtil.renameNonCodeUsages(myProject, myNonCodeUsages);
@@ -407,7 +420,7 @@ public class MoveInnerProcessor extends BaseRefactoringProcessor {
                     @NotNull final PsiElement targetContainer) {
     myNewClassName = className;
     myInnerClass = innerClass;
-    myDescriptiveName = UsageViewUtil.getDescriptiveName(myInnerClass);
+    myDescriptiveName = DescriptiveNameUtil.getDescriptiveName(myInnerClass);
     myOuterClass = myInnerClass.getContainingClass();
     myTargetContainer = targetContainer;
     JavaCodeStyleManager codeStyleManager = JavaCodeStyleManager.getInstance(myProject);

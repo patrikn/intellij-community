@@ -16,7 +16,6 @@
 package org.jetbrains.plugins.groovy.lang.psi;
 
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.api.*;
-import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.GrLabel;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.GrListOrMap;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.GrThrowsClause;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.GrModifierList;
@@ -212,10 +211,6 @@ public abstract class GroovyElementVisitor {
     visitExpression(expression);
   }
 
-  public void visitLabel(GrLabel label) {
-    visitElement(label);
-  }
-
   public void visitArgumentList(GrArgumentList list) {
     visitElement(list);
   }
@@ -258,6 +253,26 @@ public abstract class GroovyElementVisitor {
 
   public void visitTypeDefinition(GrTypeDefinition typeDefinition) {
     visitElement(typeDefinition);
+  }
+
+  public void visitClassDefinition(GrClassDefinition classDefinition) {
+    visitTypeDefinition(classDefinition);
+  }
+
+  public void visitEnumDefinition(GrEnumTypeDefinition enumDefinition) {
+    visitTypeDefinition(enumDefinition);
+  }
+
+  public void visitInterfaceDefinition(GrInterfaceDefinition interfaceDefinition) {
+    visitTypeDefinition(interfaceDefinition);
+  }
+
+  public void visitAnonymousClassDefinition(GrAnonymousClassDefinition anonymousClassDefinition) {
+    visitTypeDefinition(anonymousClassDefinition);
+  }
+
+  public void visitAnnotationTypeDefinition(GrAnnotationTypeDefinition annotationTypeDefinition) {
+    visitTypeDefinition(annotationTypeDefinition);
   }
 
   public void visitExtendsClause(GrExtendsClause extendsClause) {

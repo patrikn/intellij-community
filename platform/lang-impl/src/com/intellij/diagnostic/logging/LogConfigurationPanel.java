@@ -285,10 +285,6 @@ public class LogConfigurationPanel<T extends RunConfigurationBase> extends Setti
     return myWholePanel;
   }
 
-  @Override
-  protected void disposeEditor() {
-  }
-
   private static boolean showEditorDialog(@NotNull LogFileOptions options) {
     EditLogPatternDialog dialog = new EditLogPatternDialog();
     dialog.init(options.getName(), options.getPathPattern(), options.isShowAll());
@@ -413,7 +409,7 @@ public class LogConfigurationPanel<T extends RunConfigurationBase> extends Setti
 
   private class LogFileCellEditor extends AbstractTableCellEditor {
     private final CellEditorComponentWithBrowseButton<JTextField> myComponent;
-    private LogFileOptions myLogFileOptions;
+    private final LogFileOptions myLogFileOptions;
 
     public LogFileCellEditor(LogFileOptions options) {
       myLogFileOptions = options;

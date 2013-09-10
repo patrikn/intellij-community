@@ -15,7 +15,7 @@
  */
 package com.siyeh.ig.performance;
 
-import com.intellij.codeInsight.CodeInsightUtilBase;
+import com.intellij.codeInsight.CodeInsightUtilCore;
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
@@ -72,7 +72,13 @@ public class DynamicRegexReplaceableByCompiledPatternInspection extends BaseInsp
   }
 
   private static class DynamicRegexReplaceableByCompiledPatternFix extends InspectionGadgetsFix {
+    @Override
+    @NotNull
+    public String getFamilyName() {
+      return getName();
+    }
 
+    @Override
     @NotNull
     public String getName() {
       return InspectionGadgetsBundle.message(
@@ -148,7 +154,7 @@ public class DynamicRegexReplaceableByCompiledPatternInspection extends BaseInsp
 
       final PsiExpression newExpression = factory.createExpressionFromText(expressionText.toString(), element);
       PsiMethodCallExpression newMethodCallExpression = (PsiMethodCallExpression)methodCallExpression.replace(newExpression);
-      newMethodCallExpression = CodeInsightUtilBase.forcePsiPostprocessAndRestoreElement(newMethodCallExpression);
+      newMethodCallExpression = CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(newMethodCallExpression);
       final PsiReferenceExpression reference = getReference(newMethodCallExpression);
       HighlightUtils.showRenameTemplate(aClass, (PsiNameIdentifierOwner)field, reference);
     }

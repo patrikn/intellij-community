@@ -70,6 +70,13 @@ public class CollectionsFieldAccessReplaceableByMethodCallInspection
     }
 
     @NotNull
+    @Override
+    public String getFamilyName() {
+      return "Replace Collections.EMPTY_* with call";
+    }
+
+    @Override
+    @NotNull
     public String getName() {
       return InspectionGadgetsBundle.message(
         "collections.field.access.replaceable.by.method.call.quickfix",

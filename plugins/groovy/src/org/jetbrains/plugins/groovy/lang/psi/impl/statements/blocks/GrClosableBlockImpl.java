@@ -82,12 +82,7 @@ public class GrClosableBlockImpl extends GrBlockImpl implements GrClosableBlock 
                                             final @NotNull ResolveState state,
                                             final @Nullable PsiElement lastParent,
                                             final @NotNull PsiElement place) {
-    if (lastParent == null) return true;
-
-    if (!super.processDeclarations(plainProcessor, state, lastParent, place)) return false;
-    if (!processParameters(plainProcessor, state, place)) return false;
-    if (!ResolveUtil.processElement(plainProcessor, getOwner(), state)) return false;
-    if (!processClosureClassMembers(plainProcessor, state, lastParent, place)) return false;
+    if (!processDeclarations(plainProcessor, state, lastParent, place)) return false;
     if (!processOwnerAndDelegate(plainProcessor, nonCodeProcessor, state, place)) return false;
 
     return true;
@@ -295,7 +290,7 @@ public class GrClosableBlockImpl extends GrBlockImpl implements GrClosableBlock 
   }
 
   private PsiVariable getOwner() {
-    return CachedValuesManager.getManager(getProject()).getCachedValue(this, new CachedValueProvider<PsiVariable>() {
+    return CachedValuesManager.getCachedValue(this, new CachedValueProvider<PsiVariable>() {
       @Override
       public Result<PsiVariable> compute() {
         final GroovyPsiElement context = PsiTreeUtil.getParentOfType(GrClosableBlockImpl.this, GrTypeDefinition.class, GrClosableBlock.class, GroovyFile.class);
@@ -343,6 +338,6 @@ public class GrClosableBlockImpl extends GrBlockImpl implements GrClosableBlock 
 
   @Override
   public boolean isTopControlFlowOwner() {
-    return true;
+    return !(getParent() instanceof GrStringInjection);
   }
 }

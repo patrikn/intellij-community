@@ -15,6 +15,7 @@
  */
 package com.intellij.openapi.util.io;
 
+import com.intellij.Patches;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.win32.FileInfo;
@@ -142,6 +143,9 @@ public class FileSystemUtil {
     return attributes != null ? attributes.lastModified : 0;
   }
 
+  /**
+   * Checks if a last element in the path is a symlink.
+   */
   public static boolean isSymLink(@NotNull String path) {
     if (SystemInfo.areSymLinksSupported) {
       final FileAttributes attributes = getAttributes(path);
@@ -150,6 +154,9 @@ public class FileSystemUtil {
     return false;
   }
 
+  /**
+   * Checks if a last element in the path is a symlink.
+   */
   public static boolean isSymLink(@NotNull File file) {
     return isSymLink(file.getAbsolutePath());
   }
@@ -213,6 +220,7 @@ public class FileSystemUtil {
     private final String mySchema;
 
     private Nio2MediatorImpl() throws Exception {
+      if (Patches.USE_REFLECTION_TO_ACCESS_JDK7) {
       myDefaultFileSystem = Class.forName("java.nio.file.FileSystems").getMethod("getDefault").invoke(null);
 
       myGetPath = Class.forName("java.nio.file.FileSystem").getMethod("getPath", String.class, String[].class);
@@ -239,6 +247,7 @@ public class FileSystemUtil {
       myToMillis.setAccessible(true);
 
       mySchema = SystemInfo.isWindows ? "dos:*" : "posix:*";
+      }
     }
 
     @Override
@@ -288,10 +297,13 @@ public class FileSystemUtil {
     @Override
     public String resolveSymLink(@NotNull final String path) throws Exception {
       if (!new File(path).exists()) return null;
+      assert Patches.USE_REFLECTION_TO_ACCESS_JDK7;
+
       final Object pathObj = myGetPath.invoke(myDefaultFileSystem, path, ArrayUtil.EMPTY_STRING_ARRAY);
       final Method toRealPath = pathObj.getClass().getMethod("toRealPath", myLinkOptions.getClass());
       toRealPath.setAccessible(true);
       return toRealPath.invoke(pathObj, myLinkOptions).toString();
+
     }
 
     @Override

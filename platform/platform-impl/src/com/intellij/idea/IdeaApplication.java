@@ -17,12 +17,17 @@ package com.intellij.idea;
 
 import com.intellij.ExtensionPoints;
 import com.intellij.Patches;
-import com.intellij.diagnostic.PluginException;
+import com.intellij.concurrency.JobScheduler;
 import com.intellij.ide.AppLifecycleListener;
 import com.intellij.ide.CommandLineProcessor;
 import com.intellij.ide.IdeEventQueue;
 import com.intellij.ide.IdeRepaintManager;
 import com.intellij.ide.plugins.PluginManager;
+import com.intellij.ide.plugins.PluginManagerCore;
+import com.intellij.notification.NotificationDisplayType;
+import com.intellij.notification.NotificationGroup;
+import com.intellij.notification.NotificationType;
+import com.intellij.notification.NotificationsConfiguration;
 import com.intellij.openapi.application.*;
 import com.intellij.openapi.application.ex.ApplicationEx;
 import com.intellij.openapi.application.ex.ApplicationInfoEx;
@@ -49,10 +54,13 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.IOException;
+import java.io.File;
 import java.util.Arrays;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-@SuppressWarnings({"CallToPrintStackTrace"})
 public class IdeaApplication {
   @NonNls public static final String IDEA_IS_INTERNAL_PROPERTY = "idea.is.internal";
 
@@ -60,9 +68,18 @@ public class IdeaApplication {
 
   private static IdeaApplication ourInstance;
 
-  protected final String[] myArgs;
+  public static IdeaApplication getInstance() {
+    return ourInstance;
+  }
+
+  public static boolean isLoaded() {
+    return ourInstance != null && ourInstance.myLoaded;
+  }
+
+  private final String[] myArgs;
   private boolean myPerformProjectLoad = true;
   private ApplicationStarter myStarter;
+  private volatile boolean myLoaded = false;
 
   public IdeaApplication(String[] args) {
     LOG.assertTrue(ourInstance == null);
@@ -72,14 +89,15 @@ public class IdeaApplication {
     myArgs = args;
     boolean isInternal = Boolean.valueOf(System.getProperty(IDEA_IS_INTERNAL_PROPERTY)).booleanValue();
 
-    if (Main.isCommandLine(args)) {
-      boolean headless = Main.isHeadless(args);
-      if (!headless) patchSystem();
+    boolean headless = Main.isHeadless();
+    if (!headless) {
+      patchSystem();
+    }
+
+    if (Main.isCommandLine()) {
       new CommandLineApplication(isInternal, false, headless);
     }
     else {
-      patchSystem();
-
       Splash splash = null;
       if (myArgs.length == 0) {
         myStarter = getStarter();
@@ -117,40 +135,128 @@ public class IdeaApplication {
     IconLoader.activate();
 
     new JFrame().pack(); // this peer will prevent shutting down our application
+
+    final File file = new File(PathManager.getSystemPath());
+    if (!file.canWrite()) {
+      String fullProductName = ApplicationNamesInfo.getInstance().getFullProductName();
+      String message = "System directory of " + fullProductName + " is read only";
+      LOG.info(message);
+      Messages.showErrorDialog(message, "Fatal Configuration Problem");
+    }
+    final AtomicBoolean reported = new AtomicBoolean();
+    final long lowDiskSpaceThreshold = 50 * 1024 * 1024;
+    final ThreadLocal<Future<Long>> ourFreeSpaceCalculation = new ThreadLocal<Future<Long>>();
+
+    JobScheduler.getScheduler().schedule(new Runnable() {
+      public static final long MAX_WRITE_SPEED_IN_BYTES_PER_SECOND = 1024 * 1024 * 500; // 500Mb/sec is near max SSD sequential write speed
+
+      @Override
+      public void run() {
+        if (!reported.get()) {
+          Future<Long> future = ourFreeSpaceCalculation.get();
+          if (future == null) {
+            ourFreeSpaceCalculation.set(future = ApplicationManager.getApplication().executeOnPooledThread(new Callable<Long>() {
+              @Override
+              public Long call() throws Exception {
+                return file.getUsableSpace();
+              }
+            }));
+          }
+          if (!future.isDone()) {
+            JobScheduler.getScheduler().schedule(this, 1, TimeUnit.SECONDS);
+            return;
+          }
+
+          try {
+            final long fileUsableSpace = future.isCancelled() ? 0 : future.get();
+            final long timeout = Math.max(5, (fileUsableSpace - lowDiskSpaceThreshold) / MAX_WRITE_SPEED_IN_BYTES_PER_SECOND);
+            ourFreeSpaceCalculation.set(null);
+
+            if (fileUsableSpace < lowDiskSpaceThreshold) {
+              if(!notificationsComponentIsLoaded()) {
+                ourFreeSpaceCalculation.set(future);
+                JobScheduler.getScheduler().schedule(this, 1, TimeUnit.SECONDS);
+                return;
+              }
+              reported.compareAndSet(false, true);
+
+              //noinspection SSBasedInspection
+              SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                  String fullProductName = ApplicationNamesInfo.getInstance().getFullProductName();
+                  String message = "Low disk space on disk where system directory of " + fullProductName + " is located";
+                  if (fileUsableSpace < 100 * 1024) {
+                    LOG.info(message);
+                    Messages.showErrorDialog(message, "Fatal Configuration Problem");
+                    reported.compareAndSet(true, false);
+                    restart(timeout);
+                  }
+                  else {
+                    new NotificationGroup("System", NotificationDisplayType.STICKY_BALLOON, false)
+                      .createNotification(message, file.getPath(), NotificationType.ERROR, null).whenExpired(new Runnable() {
+                      @Override
+                      public void run() {
+                        reported.compareAndSet(true, false);
+                        restart(timeout);
+                      }
+                    }).notify(null);
+                  }
+                }
+              });
+            } else {
+              restart(timeout);
+            }
+          } catch (Exception ex) {
+            LOG.error(ex);
+          }
+        }
+      }
+
+      private boolean notificationsComponentIsLoaded() {
+        return ApplicationManager.getApplication().runReadAction(new Computable<NotificationsConfiguration>() {
+          @Override
+          public NotificationsConfiguration compute() {
+            return NotificationsConfiguration.getNotificationsConfiguration();
+          }
+        }) != null;
+      }
+
+      private void restart(long timeout) {
+        JobScheduler.getScheduler().schedule(this, timeout, TimeUnit.SECONDS);
+      }
+
+    }, 1, TimeUnit.SECONDS);
   }
 
   protected ApplicationStarter getStarter() {
     if (myArgs.length > 0) {
-      PluginManager.getPlugins();
+      PluginManagerCore.getPlugins();
 
       ExtensionPoint<ApplicationStarter> point = Extensions.getRootArea().getExtensionPoint(ExtensionPoints.APPLICATION_STARTER);
-      final ApplicationStarter[] starters = point.getExtensions();
+      ApplicationStarter[] starters = point.getExtensions();
       String key = myArgs[0];
       for (ApplicationStarter o : starters) {
         if (Comparing.equal(o.getCommandName(), key)) return o;
       }
     }
+
     return new IdeStarter();
   }
 
-  public static IdeaApplication getInstance() {
-    return ourInstance;
-  }
-
   public void run() {
-    ApplicationEx app = ApplicationManagerEx.getApplicationEx();
     try {
+      ApplicationEx app = ApplicationManagerEx.getApplicationEx();
       app.load(PathManager.getOptionsPath());
-    }
-    catch (IOException e) {
-      e.printStackTrace();
-    }
-    catch (InvalidDataException e) {
-      e.printStackTrace();
-    }
 
-    myStarter.main(myArgs);
-    myStarter = null; //GC it
+      myStarter.main(myArgs);
+      myStarter = null; //GC it
+
+      myLoaded = true;
+    }
+    catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
   @SuppressWarnings({"HardCodedStringLiteral"})
@@ -214,36 +320,28 @@ public class IdeaApplication {
 
     @Override
     public void main(String[] args) {
+      SystemDock.updateMenu();
 
-      SystemDock.initialize();
       // Event queue should not be changed during initialization of application components.
       // It also cannot be changed before initialization of application components because IdeEventQueue uses other
       // application components. So it is proper to perform replacement only here.
       ApplicationEx app = ApplicationManagerEx.getApplicationEx();
-      // app.setupIdeQueue(IdeEventQueue.getInstance());
       WindowManagerImpl windowManager = (WindowManagerImpl)WindowManager.getInstance();
+      IdeEventQueue.getInstance().setWindowManager(windowManager);
 
-      try {
-        IdeEventQueue.getInstance().setWindowManager(windowManager);
+      Ref<Boolean> willOpenProject = new Ref<Boolean>(Boolean.FALSE);
+      AppLifecycleListener lifecyclePublisher = app.getMessageBus().syncPublisher(AppLifecycleListener.TOPIC);
+      lifecyclePublisher.appFrameCreated(args, willOpenProject);
 
-        final Ref<Boolean> willOpenProject = new Ref<Boolean>(Boolean.FALSE);
-        final AppLifecycleListener lifecyclePublisher = app.getMessageBus().syncPublisher(AppLifecycleListener.TOPIC);
-        lifecyclePublisher.appFrameCreated(args, willOpenProject);
-        LOG.info("App initialization took " + (System.nanoTime() - PluginManager.startupStart) / 1000000 + " ms");
-        PluginManager.dumpPluginClassStatistics();
-        if (!willOpenProject.get()) {
-          WelcomeFrame.showNow();
-          lifecyclePublisher.welcomeScreenDisplayed();
-        }
-        else {
-          windowManager.showFrame();
-        }
+      LOG.info("App initialization took " + (System.nanoTime() - PluginManager.startupStart) / 1000000 + " ms");
+      PluginManagerCore.dumpPluginClassStatistics();
+
+      if (!willOpenProject.get()) {
+        WelcomeFrame.showNow();
+        lifecyclePublisher.welcomeScreenDisplayed();
       }
-      catch (PluginException e) {
-        Messages.showErrorDialog("Plugin " + e.getPluginId() + " couldn't be loaded, the IDE will now exit.\n" +
-                                 "See the full details in the log.\n" +
-                                 e.getMessage(), "Plugin Error");
-        System.exit(-1);
+      else {
+        windowManager.showFrame();
       }
 
       app.invokeLater(new Runnable() {
@@ -283,12 +381,12 @@ public class IdeaApplication {
         }
       }, ModalityState.NON_MODAL);
     }
-
   }
 
   private void loadProject() {
     Project project = null;
     if (myArgs != null && myArgs.length > 0 && myArgs[0] != null) {
+      LOG.info("IdeaApplication.loadProject");
       project = CommandLineProcessor.processExternalCommandLine(Arrays.asList(myArgs), null);
     }
 

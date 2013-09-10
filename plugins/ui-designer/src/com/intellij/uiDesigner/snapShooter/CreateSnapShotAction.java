@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,7 @@
 
 package com.intellij.uiDesigner.snapShooter;
 
-import com.intellij.execution.ExecutionException;
-import com.intellij.execution.RunManagerEx;
-import com.intellij.execution.RunnerAndConfigurationSettings;
-import com.intellij.execution.RunnerRegistry;
+import com.intellij.execution.*;
 import com.intellij.execution.application.ApplicationConfiguration;
 import com.intellij.execution.application.ApplicationConfigurationType;
 import com.intellij.execution.executors.DefaultRunExecutor;
@@ -28,6 +25,7 @@ import com.intellij.execution.runners.ProgramRunner;
 import com.intellij.execution.util.JreVersionDetector;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.IdeView;
+import com.intellij.ide.highlighter.JavaHighlightingColors;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.LangDataKeys;
@@ -35,7 +33,6 @@ import com.intellij.openapi.actionSystem.PlatformDataKeys;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.editor.SyntaxHighlighterColors;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.editor.markup.TextAttributes;
@@ -118,7 +115,7 @@ public class CreateSnapShotAction extends AnAction {
     boolean connected = false;
 
     ApplicationConfigurationType cfgType = ApplicationConfigurationType.getInstance();
-    RunnerAndConfigurationSettings[] racsi = RunManagerEx.getInstanceEx(project).getConfigurationSettings(cfgType);
+    List<RunnerAndConfigurationSettings> racsi = RunManager.getInstance(project).getConfigurationSettingsList(cfgType);
 
     for(RunnerAndConfigurationSettings config: racsi) {
       if (config.getConfiguration() instanceof ApplicationConfiguration) {
@@ -175,8 +172,9 @@ public class CreateSnapShotAction extends AnAction {
       try {
         final ProgramRunner runner = RunnerRegistry.getInstance().getRunner(DefaultRunExecutor.EXECUTOR_ID, appConfig);
         LOG.assertTrue(runner != null, "Runner MUST not be null!");
-        runner.execute(DefaultRunExecutor.getRunExecutorInstance(),
-                       new ExecutionEnvironment(runner, snapshotConfiguration, project));
+        Executor executor = DefaultRunExecutor.getRunExecutorInstance();
+        runner.execute(
+          new ExecutionEnvironment(executor, runner, snapshotConfiguration, project));
       }
       catch (ExecutionException ex) {
         Messages.showMessageDialog(project, UIDesignerBundle.message("snapshot.run.error", ex.getMessage()),
@@ -349,7 +347,7 @@ public class CreateSnapShotAction extends AnAction {
       myFormNameTextField.setText(suggestFormName());
 
       final EditorColorsScheme globalScheme = EditorColorsManager.getInstance().getGlobalScheme();
-      final TextAttributes attributes = globalScheme.getAttributes(SyntaxHighlighterColors.STRING);
+      final TextAttributes attributes = globalScheme.getAttributes(JavaHighlightingColors.STRING);
       final SimpleTextAttributes titleAttributes =
         new SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, attributes.getForegroundColor());
 

@@ -5,6 +5,7 @@ import com.intellij.ide.util.JavaAnonymousClassesHelper;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.project.Project;
@@ -35,6 +36,8 @@ import java.io.StringWriter;
  * Date: 5/7/12
  */
 public class ByteCodeViewerManager extends DockablePopupManager<ByteCodeViewerComponent> {
+  private static final ExtensionPointName<ClassSearcher> CLASS_SEARCHER_EP = ExtensionPointName.create("ByteCodeViewer.classSearcher");
+
   private static final Logger LOG = Logger.getInstance("#" + ByteCodeViewerManager.class.getName());
 
   public static final String TOOLWINDOW_ID = "Byte Code Viewer";
@@ -102,9 +105,18 @@ public class ByteCodeViewerManager extends DockablePopupManager<ByteCodeViewerCo
     if (!StringUtil.isEmpty(byteCode)) {
       component.setText(byteCode, element);
     } else {
-      PsiClass containingClass = getContainingClass(element);
-      PsiFile containingFile = element.getContainingFile();
-      component.setText("No bytecode found for " + SymbolPresentationUtil.getSymbolPresentableText(containingClass != null ? containingClass : containingFile));
+      PsiElement presentableElement = getContainingClass(element);
+      if (presentableElement == null) {
+        presentableElement = element.getContainingFile();
+        if (presentableElement == null && element instanceof PsiNamedElement) {
+          presentableElement = element;
+        }
+        if (presentableElement == null) {
+          component.setText("No bytecode found");
+          return;
+        }
+      }
+      component.setText("No bytecode found for " + SymbolPresentationUtil.getSymbolPresentableText(presentableElement));
     }
     content.setDisplayName(getTitle(element));
   }
@@ -223,8 +235,21 @@ public class ByteCodeViewerManager extends DockablePopupManager<ByteCodeViewerCo
     return ClassUtil.getJVMClassName(containingClass);
   }
 
-  private static PsiClass getContainingClass(PsiElement psiElement) {
+  public static PsiClass getContainingClass(PsiElement psiElement) {
+    for (ClassSearcher searcher : CLASS_SEARCHER_EP.getExtensions()) {
+      PsiClass aClass = searcher.findClass(psiElement);
+      if (aClass != null) {
+        return aClass;
+      }
+    }
+    return findClass(psiElement);
+  }
+
+  public static PsiClass findClass(@NotNull PsiElement psiElement) {
     PsiClass containingClass = PsiTreeUtil.getParentOfType(psiElement, PsiClass.class, false);
+    while (containingClass instanceof PsiTypeParameter) {
+      containingClass = PsiTreeUtil.getParentOfType(containingClass, PsiClass.class);
+    }
     if (containingClass == null) return null;
 
     return containingClass;

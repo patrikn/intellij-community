@@ -19,7 +19,6 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiReference;
 import com.intellij.psi.PsiReferenceProvider;
 import com.intellij.psi.filters.ElementFilter;
-import com.intellij.psi.impl.source.resolve.reference.PsiReferenceProviderBase;
 import com.intellij.psi.templateLanguages.OuterLanguageElement;
 import com.intellij.psi.xml.XmlAttribute;
 import com.intellij.psi.xml.XmlAttributeValue;
@@ -31,6 +30,8 @@ import com.intellij.xml.util.XmlUtil;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.Arrays;
 
 /**
  * @author peter
@@ -88,7 +89,7 @@ public class IdReferenceProvider extends PsiReferenceProvider {
       if (!(parentElement instanceof XmlAttribute)) return PsiReference.EMPTY_ARRAY;
       final String name = ((XmlAttribute)parentElement).getName();
       final String ns = ((XmlAttribute)parentElement).getParent().getNamespace();
-      final boolean jsfNs = XmlUtil.JSF_CORE_URI.equals(ns) || XmlUtil.JSF_HTML_URI.equals(ns);
+      final boolean jsfNs = Arrays.asList(XmlUtil.JSF_CORE_URIS).contains(ns) ||Arrays.asList(XmlUtil.JSF_HTML_URIS).contains(ns);
 
       if (FOR_ATTR_NAME.equals(name)) {
         return new PsiReference[]{

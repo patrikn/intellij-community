@@ -31,6 +31,8 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.codeStyle.GroovyCodeStyleSettings;
 import org.jetbrains.plugins.groovy.formatter.FormattingContext;
 import org.jetbrains.plugins.groovy.formatter.GeeseUtil;
+import org.jetbrains.plugins.groovy.formatter.blocks.GroovyBlock;
+import org.jetbrains.plugins.groovy.formatter.blocks.ParameterListBlock;
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.api.*;
 import org.jetbrains.plugins.groovy.lang.lexer.TokenSets;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyElementVisitor;
@@ -65,8 +67,12 @@ import org.jetbrains.plugins.groovy.lang.psi.api.types.GrTypeParameterList;
 import static org.jetbrains.plugins.groovy.GroovyFileType.GROOVY_LANGUAGE;
 import static org.jetbrains.plugins.groovy.formatter.models.spacing.SpacingTokens.*;
 import static org.jetbrains.plugins.groovy.formatter.models.spacing.SpacingTokens.GROOVY_DOC_COMMENT;
+import static org.jetbrains.plugins.groovy.formatter.models.spacing.SpacingTokens.kIN;
 import static org.jetbrains.plugins.groovy.formatter.models.spacing.SpacingTokens.mCOMMA;
 import static org.jetbrains.plugins.groovy.formatter.models.spacing.SpacingTokens.mELVIS;
+import static org.jetbrains.plugins.groovy.formatter.models.spacing.SpacingTokens.mGDOC_COMMENT_DATA;
+import static org.jetbrains.plugins.groovy.formatter.models.spacing.SpacingTokens.mGDOC_COMMENT_END;
+import static org.jetbrains.plugins.groovy.formatter.models.spacing.SpacingTokens.mGDOC_COMMENT_START;
 import static org.jetbrains.plugins.groovy.formatter.models.spacing.SpacingTokens.mQUESTION;
 import static org.jetbrains.plugins.groovy.formatter.models.spacing.SpacingTokens.mSEMI;
 import static org.jetbrains.plugins.groovy.lang.groovydoc.lexer.GroovyDocTokenTypes.mGDOC_ASTERISKS;
@@ -109,12 +115,15 @@ public class GroovySpacingProcessor extends GroovyElementVisitor {
   private IElementType myType1;
   private IElementType myType2;
 
-  public GroovySpacingProcessor(ASTNode node, FormattingContext context) {
+  public GroovySpacingProcessor(GroovyBlock block1, GroovyBlock block2, FormattingContext context) {
     mySettings = context.getSettings();
     myGroovySettings = context.getGroovySettings();
 
+    final ASTNode node = block2.getNode();
+
     if (init(node)) return;
     if (manageComments()) return;
+    if (manageMethodParameterList(block2)) return;
 
     if (myParent instanceof GroovyPsiElement) {
       ((GroovyPsiElement) myParent).accept(this);
@@ -162,6 +171,14 @@ public class GroovySpacingProcessor extends GroovyElementVisitor {
     }
   }
 
+  private boolean manageMethodParameterList(GroovyBlock block2) {
+    if (block2 instanceof ParameterListBlock) {
+      createSpaceInCode(mySettings.SPACE_BEFORE_METHOD_PARENTHESES);
+      return true;
+    }
+    return false;
+  }
+
   private boolean manageComments() {
     if (mySettings.KEEP_FIRST_COLUMN_COMMENT && COMMENT_SET.contains(myType2)) {
       if (myType1 != IMPORT_STATEMENT) {
@@ -189,6 +206,18 @@ public class GroovySpacingProcessor extends GroovyElementVisitor {
   @Override
   public void visitGStringInjection(GrStringInjection injection) {
     createSpaceInCode(false);
+  }
+
+  @Override
+  public void visitLabeledStatement(GrLabeledStatement labeledStatement) {
+    if (myType1 == mCOLON) {
+      if (myGroovySettings.INDENT_LABEL_BLOCKS) {
+        createLF(true);
+      }
+      else {
+        createSpaceInCode(true);
+      }
+    }
   }
 
   @Override
@@ -335,7 +364,7 @@ public class GroovySpacingProcessor extends GroovyElementVisitor {
     else if (myType2 == PACKAGE_DEFINITION) {
       myResult = Spacing.createSpacing(0, 0, mySettings.BLANK_LINES_BEFORE_PACKAGE + 1, mySettings.KEEP_LINE_BREAKS, Integer.MAX_VALUE / 2);
     }
-    else if (TYPE_DEFINITION_TYPES.contains(myType1) || TYPE_DEFINITION_TYPES.contains(myType2)) {
+    else if (isLeftOrRight(TYPE_DEFINITION_TYPES)) {
       if (myType1 == GROOVY_DOC_COMMENT) {
         createLF(true);
       }
@@ -481,8 +510,7 @@ public class GroovySpacingProcessor extends GroovyElementVisitor {
       }
     }
     else if (myType1 == mLCURLY) {
-      myResult = Spacing.createSpacing(0, 0, mySettings.BLANK_LINES_AFTER_CLASS_HEADER + 1, mySettings.KEEP_LINE_BREAKS,
-                                       mySettings.KEEP_BLANK_LINES_IN_DECLARATIONS);
+      myResult = Spacing.createSpacing(0, 0, mySettings.BLANK_LINES_AFTER_CLASS_HEADER + 1, mySettings.KEEP_LINE_BREAKS, keepBlankLines());
     }
     else if (myType2 == mRCURLY) {
       createLF(true);
@@ -562,10 +590,7 @@ public class GroovySpacingProcessor extends GroovyElementVisitor {
 
   @Override
   public void visitMethod(GrMethod method) {
-    if (myType2 == mLPAREN) {
-      createSpaceInCode(mySettings.SPACE_BEFORE_METHOD_PARENTHESES);
-    }
-    else if (myType1 == mRPAREN && myType2 == THROW_CLAUSE) {
+    if (myType1 == mRPAREN && myType2 == THROW_CLAUSE) {
       if (mySettings.THROWS_KEYWORD_WRAP == CommonCodeStyleSettings.WRAP_ALWAYS) {
         createLF(true);
       }
@@ -723,6 +748,7 @@ public class GroovySpacingProcessor extends GroovyElementVisitor {
 
   @Override
   public void visitBinaryExpression(GrBinaryExpression expression) {
+
     @SuppressWarnings("SimplifiableConditionalExpression" )
     boolean spaceAround = isLeftOrRight(LOGICAL_OPERATORS)        ? mySettings.SPACE_AROUND_LOGICAL_OPERATORS :
                           isLeftOrRight(EQUALITY_OPERATORS)       ? mySettings.SPACE_AROUND_EQUALITY_OPERATORS :
@@ -731,7 +757,7 @@ public class GroovySpacingProcessor extends GroovyElementVisitor {
                           isLeftOrRight(ADDITIVE_OPERATORS)       ? mySettings.SPACE_AROUND_ADDITIVE_OPERATORS :
                           isLeftOrRight(MULTIPLICATIVE_OPERATORS) ? mySettings.SPACE_AROUND_MULTIPLICATIVE_OPERATORS :
                           isLeftOrRight(SHIFT_OPERATORS)          ? mySettings.SPACE_AROUND_SHIFT_OPERATORS :
-                          false;
+                          isLeftOrRight(kIN);
     if (TokenSets.BINARY_OP_SET.contains(myType2)) {
       createDependentLFSpacing(mySettings.BINARY_OPERATION_SIGN_ON_NEXT_LINE, spaceAround, expression.getTextRange());
     }
@@ -742,6 +768,10 @@ public class GroovySpacingProcessor extends GroovyElementVisitor {
 
   private boolean isLeftOrRight(TokenSet operators) {
     return operators.contains(myType1) || operators.contains(myType2);
+  }
+
+  private boolean isLeftOrRight(IElementType type) {
+    return myType1 == type || myType2 == type;
   }
 
   @Override
@@ -789,6 +819,16 @@ public class GroovySpacingProcessor extends GroovyElementVisitor {
         createSpaceInCode(true);
       }
     }
+
+    if (myType1 == mGDOC_COMMENT_START && myType2 == mGDOC_COMMENT_DATA ||
+        myType1 == mGDOC_COMMENT_DATA &&  myType2 == mGDOC_COMMENT_END ||
+        myType1 == mGDOC_ASTERISKS &&     myType2 == mGDOC_COMMENT_END) {
+      createLazySpace();
+    }
+  }
+
+  private void createLazySpace() {
+    myResult = Spacing.createSpacing(0, Integer.MAX_VALUE, 0, mySettings.KEEP_LINE_BREAKS, mySettings.KEEP_BLANK_LINES_IN_CODE);
   }
 
   public void visitDocTag(GrDocTag docTag) {
@@ -1004,6 +1044,9 @@ public class GroovySpacingProcessor extends GroovyElementVisitor {
   private int keepBlankLines() {
     if (myType2 == mRCURLY) {
       return mySettings.KEEP_BLANK_LINES_BEFORE_RBRACE;
+    }
+    else if (myParent instanceof GrTypeDefinitionBody) {
+      return mySettings.KEEP_BLANK_LINES_IN_DECLARATIONS;
     }
     else {
       return mySettings.KEEP_BLANK_LINES_IN_CODE;

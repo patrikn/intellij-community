@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -369,7 +369,7 @@ public class ProjectImpl extends ComponentManagerImpl implements ProjectEx {
       Notification notification = new Notification(
         PLUGIN_SETTINGS_ERROR,
         "Unable to save plugin settings!",
-        "<p>The plugin <i>" + e.getPluginId() + "</i> failed to save settings and has been disabled. Please restart" +
+        "<p>The plugin <i>" + e.getPluginId() + "</i> failed to save settings and has been disabled. Please restart " +
         ApplicationNamesInfo.getInstance().getFullProductName() + "</p>" +
         (ApplicationManagerEx.getApplicationEx().isInternal() ? "<p>" + StringUtil.getThrowableText(e) + "</p>" : ""),
         NotificationType.ERROR);
@@ -438,15 +438,16 @@ public class ProjectImpl extends ComponentManagerImpl implements ProjectEx {
     }
   }
 
+  @NotNull
   @Override
-  public <T> T[] getExtensions(final ExtensionPointName<T> extensionPointName) {
+  public <T> T[] getExtensions(@NotNull final ExtensionPointName<T> extensionPointName) {
     return Extensions.getArea(this).getExtensionPoint(extensionPointName).getExtensions();
   }
 
   public String getDefaultName() {
     if (isDefault()) return TEMPLATE_PROJECT_NAME;
 
-    return getStateStore().getProjectName();    
+    return getStateStore().getProjectName();
   }
 
   private class MyProjectManagerListener extends ProjectManagerAdapter {

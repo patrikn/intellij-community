@@ -15,6 +15,7 @@
  */
 package com.siyeh.ig.inheritance;
 
+import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.ProblemDescriptor;
@@ -53,6 +54,7 @@ class StaticInheritanceFix extends InspectionGadgetsFix {
     myReplaceInWholeProject = replaceInWholeProject;
   }
 
+  @Override
   @NotNull
   public String getName() {
     String scope =
@@ -60,8 +62,16 @@ class StaticInheritanceFix extends InspectionGadgetsFix {
     return InspectionGadgetsBundle.message("static.inheritance.replace.quickfix", scope);
   }
 
+  @NotNull
+  @Override
+  public String getFamilyName() {
+    return "Replace inheritance with qualified reference";
+  }
+
+  @Override
   public void doFix(final Project project, final ProblemDescriptor descriptor) throws IncorrectOperationException {
     ApplicationManager.getApplication().invokeLater(new Runnable() {
+      @Override
       public void run() {
         dodoFix(project, descriptor);
       }
@@ -81,6 +91,7 @@ class StaticInheritanceFix extends InspectionGadgetsFix {
 
     ProgressManager.getInstance().run(new Task.Modal(project, "Replacing usages of " + iface.getName(), false) {
 
+      @Override
       public void run(@NotNull ProgressIndicator indicator) {
         for (final PsiField field : allFields) {
           final Query<PsiReference> search = ReferencesSearch.search(field, implementingClass.getUseScope(), false);
@@ -100,8 +111,9 @@ class StaticInheritanceFix extends InspectionGadgetsFix {
               if (!isInheritor) continue;
             }
             final Runnable runnable = new Runnable() {
+              @Override
               public void run() {
-                if (isQuickFixOnReadOnlyFile(referenceExpression)) {
+                if (!FileModificationService.getInstance().preparePsiElementsForWrite(referenceExpression)) {
                   return;
                 }
                 final PsiElementFactory elementFactory = JavaPsiFacade.getInstance(manager.getProject()).getElementFactory();
@@ -119,6 +131,7 @@ class StaticInheritanceFix extends InspectionGadgetsFix {
           }
         }
         final Runnable runnable = new Runnable() {
+          @Override
           public void run() {
             PsiClassType classType = JavaPsiFacade.getInstance(project).getElementFactory().createType(iface);
             IntentionAction fix = QuickFixFactory.getInstance().createExtendsListFix(implementingClass, classType, false);
@@ -133,8 +146,10 @@ class StaticInheritanceFix extends InspectionGadgetsFix {
   private static void invokeWriteAction(final Runnable runnable, final PsiFile file) {
     try {
       GuiUtils.runOrInvokeAndWait(new Runnable() {
+        @Override
         public void run() {
           new WriteCommandAction(file.getProject(), file) {
+            @Override
             protected void run(Result result) throws Throwable {
               runnable.run();
             }

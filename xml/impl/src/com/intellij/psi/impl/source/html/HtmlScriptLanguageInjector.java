@@ -16,14 +16,16 @@
 package com.intellij.psi.impl.source.html;
 
 import com.intellij.lang.Language;
+import com.intellij.lang.LanguageUtil;
+import com.intellij.lang.StdLanguages;
 import com.intellij.lang.injection.MultiHostInjector;
 import com.intellij.lang.injection.MultiHostRegistrar;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiLanguageInjectionHost;
-import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.psi.xml.XmlText;
+import com.intellij.xml.util.HtmlUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
@@ -33,17 +35,26 @@ import java.util.List;
 public class HtmlScriptLanguageInjector implements MultiHostInjector {
   @Override
   public void getLanguagesToInject(@NotNull MultiHostRegistrar registrar, @NotNull PsiElement host) {
-    if (!(host instanceof XmlText)) {
+    if (!host.isValid() || !(host instanceof XmlText) || !HtmlUtil.isHtmlTagContainingFile(host)) {
       return;
     }
     XmlTag scriptTag = ((XmlText)host).getParentTag();
-    if (!"script".equalsIgnoreCase(scriptTag.getLocalName())) {
+    if (scriptTag == null || !"script".equalsIgnoreCase(scriptTag.getLocalName())) {
       return;
     }
     String mimeType = scriptTag.getAttributeValue("type");
     Collection<Language> languages = Language.findInstancesByMimeType(mimeType);
-    Language language = languages.isEmpty() ? null : languages.iterator().next();
-    if (language != null && InjectedLanguageUtil.isInjectableLanguage(language)) {
+    Language language;
+    if (!languages.isEmpty()) {
+      language = languages.iterator().next();
+    }
+    else if (mimeType != null && mimeType.contains("template")) {
+      language = StdLanguages.HTML;
+    }
+    else {
+      language = StdLanguages.TEXT;
+    }
+    if (LanguageUtil.isInjectableLanguage(language)) {
       registrar
         .startInjecting(language)
         .addPlace(null, null, (PsiLanguageInjectionHost)host, TextRange.create(0, host.getTextLength()))

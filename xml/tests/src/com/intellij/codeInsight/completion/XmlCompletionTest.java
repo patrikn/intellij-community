@@ -9,7 +9,7 @@ import com.intellij.codeInsight.lookup.impl.LookupImpl;
 import com.intellij.codeInsight.template.impl.TemplateManagerImpl;
 import com.intellij.javaee.ExternalResourceManager;
 import com.intellij.javaee.ExternalResourceManagerEx;
-import com.intellij.javaee.ExternalResourceManagerImpl;
+import com.intellij.javaee.ExternalResourceManagerExImpl;
 import com.intellij.openapi.application.Result;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.psi.PsiReference;
@@ -18,9 +18,12 @@ import com.intellij.psi.statistics.impl.StatisticsManagerImpl;
 import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
 import com.intellij.xml.util.XmlUtil;
 
+import java.util.List;
+
 /**
  * @by Maxim.Mossienko
  */
+@SuppressWarnings("ConstantConditions")
 public class XmlCompletionTest extends LightCodeInsightFixtureTestCase {
 
   private String myOldDoctype;
@@ -57,7 +60,7 @@ public class XmlCompletionTest extends LightCodeInsightFixtureTestCase {
       return;
     }
 
-    ExternalResourceManagerImpl.addTestResource(url, location, myTestRootDisposable);
+    ExternalResourceManagerExImpl.addTestResource(url, location, myTestRootDisposable);
   }
 
   @Override
@@ -611,6 +614,67 @@ public class XmlCompletionTest extends LightCodeInsightFixtureTestCase {
   public void testCompleteQualifiedTopLevelTags() throws Exception {
     configureByFiles("foo.xsd", "bar.xsd");
     basicDoTest("");
+  }
+
+  public void testDoNotSuggestExistingAttributes() throws Exception {
+    myFixture.configureByFile("DoNotSuggestExistingAttributes.xml");
+    myFixture.completeBasic();
+    List<String> strings = myFixture.getLookupElementStrings();
+    assertNotNull(strings);
+    assertFalse(strings.contains("xsi:schemaLocation"));
+    assertSameElements(strings, "attributeFormDefault",
+                       "blockDefault",
+                       "elementFormDefault",
+                       "finalDefault",
+                       "id",
+                       "targetNamespace",
+                       "version",
+                       "xml:base",
+                       "xml:id",
+                       "xml:lang",
+                       "xml:space",
+                       "xsi:nill",
+                       "xsi:noNamespaceSchemaLocation",
+                       "xsi:type");
+  }
+
+  public void testRequiredAttributesOnTop() throws Exception {
+    myFixture.configureByText("foo.html", "<img <caret>");
+    myFixture.completeBasic();
+    List<String> strings = myFixture.getLookupElementStrings();
+    assertNotNull(strings);
+    assertEquals("alt", strings.get(0));
+    assertEquals("src", strings.get(1));
+    assertEquals("align", strings.get(2));
+  }
+
+  public void testDoNotProcessAnyInRestrictions() throws Exception {
+    myFixture.configureByText("foo.xsd", "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n" +
+                                         "    <<caret>\n" +
+                                         "</xs:schema>");
+    myFixture.completeBasic();
+    assertSameElements(myFixture.getLookupElementStrings(), "xs:annotation",
+                                                            "xs:attribute",
+                                                            "xs:attributeGroup",
+                                                            "xs:complexType",
+                                                            "xs:element",
+                                                            "xs:group",
+                                                            "xs:import",
+                                                            "xs:include",
+                                                            "xs:notation",
+                                                            "xs:redefine",
+                                                            "xs:simpleType");
+  }
+
+  public void testSubstitute() throws Exception {
+    myFixture.configureByFiles("Substitute/schema-a.xsd", "Substitute/schema-b.xsd");
+    myFixture.testCompletionVariants("Substitute/test.xml", "b:instance", "instance");
+  }
+
+  public void testEnumeratedTagValue() throws Exception {
+    myFixture.configureByFile("tagValue/enumerated.xsd");
+    myFixture.testCompletionVariants("tagValue/completeEnum.xml", "none", "standard");
+    myFixture.testCompletionVariants("tagValue/completeBoolean.xml", "false", "true");
   }
 }
 

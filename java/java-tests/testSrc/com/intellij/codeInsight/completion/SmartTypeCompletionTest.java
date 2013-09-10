@@ -613,7 +613,13 @@ public class SmartTypeCompletionTest extends LightFixtureCompletionTestCase {
     configureByTestName();
     assertStringItems("byte");
     assertEquals("[]", LookupElementPresentation.renderElement(myItems[0]).getTailText());
+  }
 
+  public void testNewByteArray2() {
+    configureByTestName();
+    assertStringItems("byte", "byte");
+    assertEquals("[]", LookupElementPresentation.renderElement(myItems[0]).getTailText());
+    assertEquals("[]{...}", LookupElementPresentation.renderElement(myItems[1]).getTailText());
   }
 
   public void testInsideStringLiteral() throws Throwable { doAntiTest(); }
@@ -621,6 +627,8 @@ public class SmartTypeCompletionTest extends LightFixtureCompletionTestCase {
   public void testDefaultAnnoParam() throws Throwable { doTest(); }
 
   public void testCastGenericQualifier() throws Throwable { doTest(); }
+  
+  public void testNewWithTypeParameterErasure() throws Throwable { doTest(); }
 
   public void testEverythingDoubles() throws Throwable {
     configureByTestName();
@@ -635,6 +643,8 @@ public class SmartTypeCompletionTest extends LightFixtureCompletionTestCase {
 
   //todo 2nd completion
   public void _testDefaultAnnoParam2() throws Throwable { doTest(); }
+  
+  public void testAnnotationValue() throws Throwable {doTest(); }
 
   public void testLiveTemplate() throws Throwable {
     final Template template = TemplateManager.getInstance(getProject()).createTemplate("foo", "zzz");
@@ -780,6 +790,11 @@ public class SmartTypeCompletionTest extends LightFixtureCompletionTestCase {
     getLookup().setCurrentItem(getLookup().getItems().get(1));
     select();
     checkResultByTestName();
+  }
+
+  public void testSameSignatureWithGenerics() {
+    configureByTestName();
+    myFixture.assertPreferredCompletionItems(0, "i", "z", "zz", "i, z, zz");
   }
 
   public void testWrongAnonymous() throws Throwable {

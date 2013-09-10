@@ -19,6 +19,7 @@ import com.intellij.ide.util.projectWizard.WizardInputField;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleType;
 import com.intellij.openapi.module.ModuleTypeManager;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.IconLoader;
 import com.intellij.openapi.util.JDOMUtil;
@@ -43,16 +44,17 @@ import java.util.zip.ZipInputStream;
  */
 public class LocalArchivedTemplate extends ArchivedProjectTemplate {
 
-  public static final String DESCRIPTION_PATH = ".idea/description.html";
-  static final String IDEA_INPUT_FIELDS_XML = ".idea/project-template.xml";
+  public static final String DESCRIPTION_PATH = Project.DIRECTORY_STORE_FOLDER + "/description.html";
+  static final String IDEA_INPUT_FIELDS_XML = Project.DIRECTORY_STORE_FOLDER + "/project-template.xml";
 
   private final URL myArchivePath;
   private final ModuleType myModuleType;
   private List<WizardInputField> myInputFields = Collections.emptyList();
   private Icon myIcon;
 
-  public LocalArchivedTemplate(String displayName,
-                               URL archivePath, ClassLoader classLoader) {
+  public LocalArchivedTemplate(@NotNull String displayName,
+                               @NotNull URL archivePath,
+                               @NotNull ClassLoader classLoader) {
     super(displayName);
 
     myArchivePath = archivePath;

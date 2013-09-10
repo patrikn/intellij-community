@@ -28,6 +28,8 @@ import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SearchableConfigurable;
+import com.intellij.openapi.options.ShowSettingsUtil;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.Splitter;
@@ -119,6 +121,12 @@ public class AllFileTemplatesConfigurable implements SearchableConfigurable, Con
   }
 
   private void onClone() {
+    try {
+      myEditor.apply();
+    }
+    catch (ConfigurationException ignore) {
+    }
+    
     final FileTemplate selected = myCurrentTab.getSelectedTemplate();
     if (selected == null) {
       return;
@@ -138,6 +146,7 @@ public class AllFileTemplatesConfigurable implements SearchableConfigurable, Con
     }
     final FileTemplate newTemplate = new CustomFileTemplate(name, selected.getExtension());
     newTemplate.setText(selected.getText());
+    newTemplate.setReformatCode(selected.isReformatCode());
     myCurrentTab.addTemplate(newTemplate);
     myModified = true;
     myCurrentTab.selectTemplate(newTemplate);
@@ -362,7 +371,7 @@ public class AllFileTemplatesConfigurable implements SearchableConfigurable, Con
     if (prevTemplate != selectedValue) {
       LOG.assertTrue(myEditor != null, "selected:" + selectedValue + "; prev:" + prevTemplate);
       //selection has changed
-      if (myEditor.isModified()) {
+      if (myEditor.isModified() && Arrays.asList(myCurrentTab.getTemplates()).contains(prevTemplate)) {
         try {
           myModified = true;
           myEditor.apply();
@@ -460,9 +469,6 @@ public class AllFileTemplatesConfigurable implements SearchableConfigurable, Con
     boolean errorInName = true;
     String errorString = null;
     for (FileTemplate template : templates) {
-      if (isInternalTemplateName(template.getName())) {
-        continue;
-      }
       final String currName = template.getName();
       final String currExt = template.getExtension();
       if (currName.length() == 0) {
@@ -625,5 +631,22 @@ public class AllFileTemplatesConfigurable implements SearchableConfigurable, Con
   @Nullable
   public Runnable enableSearch(String option) {
     return null;
+  }
+
+  public static void editCodeTemplate(@NotNull final String templateId, Project project) {
+    final ShowSettingsUtil util = ShowSettingsUtil.getInstance();
+    final AllFileTemplatesConfigurable configurable = new AllFileTemplatesConfigurable();
+    util.editConfigurable(project, configurable, new Runnable() {
+      @Override
+      public void run() {
+        configurable.myTabbedPane.setSelectedIndex(ArrayUtil.indexOf(configurable.myTabs, configurable.myCodeTemplatesList));
+        for (FileTemplate template : configurable.myCodeTemplatesList.getTemplates()) {
+          if (Comparing.equal(templateId, template.getName())) {
+            configurable.myCodeTemplatesList.selectTemplate(template);
+            break;
+          }
+        }
+      }
+    });
   }
 }

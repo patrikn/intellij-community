@@ -13,13 +13,15 @@
   <extensionPoints>
 
     <extensionPoint name="xml.startTagEndToken"
-                    interface="com.intellij.psi.xml.XmlChildRole$StartTagEndTokenProvider"/>
+                    interface="com.intellij.psi.xml.StartTagEndTokenProvider"/>
     <extensionPoint name="xml.schemaProvider"
                     interface="com.intellij.xml.XmlSchemaProvider"/>
     <extensionPoint name="xml.xmlExtension"
                     interface="com.intellij.xml.XmlExtension"/>
-    <extensionPoint name="xml.tagNameProvider"
-                    interface="com.intellij.xml.XmlTagNameProvider"/>
+    <extensionPoint name="xml.namespaceHelper"
+                    interface="com.intellij.xml.XmlNamespaceHelper"/>
+    <extensionPoint name="xml.completionExtension"
+                    interface="com.intellij.xml.XmlCompletionExtension"/>
     <extensionPoint name="xml.fileNSInfoProvider"
                     interface="com.intellij.psi.xml.XmlFileNSInfoProvider"/>
     <extensionPoint name="xml.attributeDescriptorsProvider"
@@ -64,6 +66,7 @@
     <extensionPoint name="xml.xmlTagRuleProvider" interface="com.intellij.xml.XmlTagRuleProvider"/>
     <extensionPoint name="html.embeddedTokenTypesProvider" interface="com.intellij.lexer.HtmlEmbeddedTokenTypesProvider"/>
     <extensionPoint name="xml.html5SchemaProvider" interface="com.intellij.xml.Html5SchemaProvider"/>
+    <extensionPoint name="xml.implicitIdRefProvider" interface="com.intellij.psi.impl.source.resolve.reference.impl.providers.ImplicitIdRefProvider"/>
 
     <extensionPoint qualifiedName="org.jetbrains.urlOpener" interface="com.intellij.ide.browsers.UrlOpener"/>
 
@@ -76,6 +79,13 @@
                     beanClass="com.intellij.lang.LanguageExtensionPoint">
       <with attribute="implementationClass" implements="com.intellij.lang.HtmlInlineScriptTokenTypesProvider"/>
     </extensionPoint>
+
+    <extensionPoint name="xml.psiPolicy"
+                    beanClass="com.intellij.lang.LanguageExtensionPoint">
+      <with attribute="implementationClass" implements="com.intellij.psi.impl.source.xml.XmlPsiPolicy"/>
+    </extensionPoint>
+
+    <extensionPoint name="xml.undefinedElementFixProvider" interface="com.intellij.xml.XmlUndefinedElementFixProvider"/>
   </extensionPoints>
 
   <project-components>
@@ -83,21 +93,29 @@
       <implementation-class>com.intellij.codeInsight.daemon.impl.tagTreeHighlighting.XmlTagTreeHighlightingPassFactory</implementation-class>
       <skipForDefaultProject/>
     </component>
+    <component>
+      <implementation-class>com.intellij.xml.XmlPsiManager</implementation-class>
+      <skipForDefaultProject/>
+    </component>
   </project-components>
 
   <extensions defaultExtensionNs="com.intellij">
     <fileTypeFactory implementation="com.intellij.xml.XmlFileTypeFactory"/>
 
+    <lang.syntaxHighlighterFactory key="XML" implementationClass="com.intellij.lang.xml.XmlSyntaxHighlighterFactory"/>
+    <lang.syntaxHighlighterFactory key="HTML" implementationClass="com.intellij.lang.html.HtmlSyntaxHighlighterFactory"/>
+    <lang.syntaxHighlighterFactory key="XHTML" implementationClass="com.intellij.lang.xhtml.XhtmlSyntaxHighlighterFactory"/>
+    <lang.syntaxHighlighterFactory key="DTD" implementationClass="com.intellij.lang.dtd.DtdSyntaxHighlighterFactory"/>
+
     <renameHandler id="xmlTagRenameHandler" implementation="com.intellij.xml.refactoring.XmlTagRenameHandler"/>
     <renameHandler implementation="com.intellij.xml.refactoring.SchemaPrefixRenameHandler" order="before xmlTagRenameHandler"/>
     <refactoring.inlineHandler language="XML" implementationClass="com.intellij.xml.refactoring.XmlInlineHandler"/>
 
-    <lang.literalEscaper language="XML" implementationClass="com.intellij.lang.xml.XmlLiteralEscaper"/>
-
     <completion.contributor language="any" implementationClass="com.intellij.codeInsight.completion.XmlCompletionContributor" id="xml"
                             order="first"/>
+    <completion.contributor language="any" implementationClass="com.intellij.codeInsight.completion.XmlNonFirstCompletionContributor" id="xmlNonFirst" order="after xml"/>
 
-    <completion.contributor language="XML" implementationClass="com.intellij.codeInsight.completion.XmlNoVariantsDelegator" order="after xml"/>
+    <completion.contributor language="XML" implementationClass="com.intellij.codeInsight.completion.XmlNoVariantsDelegator" order="before xmlNonFirst"/>
 
     <completion.confidence language="XML" implementationClass="com.intellij.codeInsight.completion.XmlNameCompletionConfidence" id="xml"/>
     <completion.confidence language="HTML" implementationClass="com.intellij.codeInsight.completion.XmlNameCompletionConfidence" id="html"/>
@@ -471,6 +489,21 @@
     <daemon.changeLocalityDetector implementation="com.intellij.xml.XmlChangeLocalityDetector"/>
     <xmlStructureViewBuilderProvider implementation="com.intellij.lang.html.structureView.HtmlStructureViewBuilderProvider"/>
     <lang.rearranger language="XML" implementationClass="com.intellij.xml.arrangement.XmlRearranger"/>
+
+    <xml.psiPolicy language="HTML" implementationClass="com.intellij.psi.impl.source.xml.behavior.EncodeEachSymbolPolicy"/>
+    <xml.psiPolicy language="XHTML" implementationClass="com.intellij.psi.impl.source.xml.behavior.EncodeEachSymbolPolicy"/>
+
+    <xml.completionExtension implementation="com.intellij.psi.impl.source.xml.DefaultXmlCompletionExtension"/>
+    <xml.fileNSInfoProvider implementation="com.intellij.xml.util.HtmlFileNSInfoProvider"/>
+
+    <codeInsight.unresolvedReferenceQuickFixProvider
+        implementation="com.intellij.psi.impl.source.resolve.reference.impl.providers.SchemaReferenceQuickFixProvider"/>
+    <codeInsight.unresolvedReferenceQuickFixProvider
+        implementation="com.intellij.psi.impl.source.resolve.reference.impl.providers.URLReferenceQuickFixProvider"/>
+    <codeInsight.unresolvedReferenceQuickFixProvider
+        implementation="com.intellij.psi.impl.source.resolve.reference.impl.providers.DependentNSReferenceQuickFixProvider"/>
+
+    <selectInTarget implementation="com.intellij.ide.browsers.SelectInDefaultBrowserTarget"/>
   </extensions>
   <extensions defaultExtensionNs="org.jetbrains">
     <urlOpener implementation="com.intellij.ide.browsers.impl.DefaultUrlOpener" order="last"/>

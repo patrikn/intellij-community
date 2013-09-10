@@ -18,7 +18,6 @@ package org.jetbrains.plugins.groovy.lang.psi.impl;
 
 import com.intellij.lang.ASTNode;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
 import com.intellij.psi.codeStyle.PackageEntry;
@@ -40,6 +39,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.GroovyFileType;
 import org.jetbrains.plugins.groovy.codeStyle.GroovyCodeStyleSettings;
+import org.jetbrains.plugins.groovy.editor.GroovyImportHelper;
 import org.jetbrains.plugins.groovy.editor.GroovyImportOptimizer;
 import org.jetbrains.plugins.groovy.extensions.GroovyScriptTypeDetector;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
@@ -70,7 +70,6 @@ import java.util.List;
 import java.util.concurrent.ConcurrentMap;
 
 import static org.jetbrains.plugins.groovy.editor.GroovyImportHelper.processImplicitImports;
-import static org.jetbrains.plugins.groovy.editor.GroovyImportHelper.processImports;
 
 /**
  * Implements all abstractions related to Groovy file
@@ -148,7 +147,7 @@ public class GroovyFileImpl extends GroovyFileBaseImpl implements GroovyFile {
     }
 
     GroovyScriptClass scriptClass = getScriptClass();
-    if (scriptClass != null && StringUtil.isJavaIdentifier(scriptClass.getName())) {
+    if (scriptClass != null && scriptClass.getName() != null) {
       if (!(lastParent instanceof GrTypeDefinition)) {
         if (!scriptClass.processDeclarations(processor, state, lastParent, place)) return false;
       }
@@ -168,9 +167,9 @@ public class GroovyFileImpl extends GroovyFileBaseImpl implements GroovyFile {
 
     final JavaPsiFacade facade = JavaPsiFacade.getInstance(getProject());
     GrImportStatement[] importStatements = getImportStatements();
-    if (!processImports(state, lastParent, place, processor, importStatements, false)) return false;
+    if (!processImports(processor, state, lastParent, place, importStatements, false)) return false;
     if (!processDeclarationsInPackage(processor, state, lastParent, place, facade, getPackageName())) return false;
-    if (!processImports(state, lastParent, place, processor, importStatements, true)) return false;
+    if (!processImports(processor, state, lastParent, place, importStatements, true)) return false;
 
     if (processClasses && !processImplicitImports(processor, state, lastParent, place, this)) {
       return false;
@@ -204,6 +203,15 @@ public class GroovyFileImpl extends GroovyFileBaseImpl implements GroovyFile {
     return true;
   }
 
+  protected boolean processImports(PsiScopeProcessor processor,
+                                   ResolveState state,
+                                   PsiElement lastParent,
+                                   PsiElement place,
+                                   GrImportStatement[] importStatements,
+                                   boolean onDemand) {
+    return GroovyImportHelper.processImports(state, lastParent, place, processor, importStatements, onDemand);
+  }
+
   private boolean processBindings(@NotNull final PsiScopeProcessor processor, @NotNull ResolveState state, PsiElement place) {
     if (!isPhysical()) return true;
 
@@ -231,7 +239,7 @@ public class GroovyFileImpl extends GroovyFileBaseImpl implements GroovyFile {
   }
 
   private ConcurrentMap<String, GrBindingVariable> getBindings() {
-    return CachedValuesManager.getManager(getProject()).getCachedValue(this, BINDING_PROVIDER);
+    return CachedValuesManager.getCachedValue(this, BINDING_PROVIDER);
   }
 
   @Nullable
@@ -481,7 +489,7 @@ public class GroovyFileImpl extends GroovyFileBaseImpl implements GroovyFile {
 
   @Override
   public PsiType getInferredScriptReturnType() {
-    return CachedValuesManager.getManager(getProject()).getCachedValue(this, new CachedValueProvider<PsiType>() {
+    return CachedValuesManager.getCachedValue(this, new CachedValueProvider<PsiType>() {
       @Override
       public Result<PsiType> compute() {
         return Result.create(GroovyPsiManager.inferType(GroovyFileImpl.this, new MethodTypeInferencer(GroovyFileImpl.this)),
@@ -538,7 +546,7 @@ public class GroovyFileImpl extends GroovyFileBaseImpl implements GroovyFile {
     final PsiClass scriptClass = getScriptClass();
     if (scriptClass != null) {
       final PsiElement originalElement = scriptClass.getOriginalElement();
-      if (originalElement != scriptClass) {
+      if (originalElement != scriptClass && originalElement != null) {
         return originalElement.getContainingFile();
       }
     }

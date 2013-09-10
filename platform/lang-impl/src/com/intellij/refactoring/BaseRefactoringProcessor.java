@@ -60,13 +60,14 @@ import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.ui.UIUtil;
 import gnu.trove.THashSet;
+import gnu.trove.TObjectHashingStrategy;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 
-public abstract class BaseRefactoringProcessor {
+public abstract class BaseRefactoringProcessor implements Runnable {
   private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.BaseRefactoringProcessor");
 
   protected final Project myProject;
@@ -233,7 +234,7 @@ public abstract class BaseRefactoringProcessor {
       public UsageSearcher create() {
         return new UsageSearcher() {
           @Override
-          public void generate(final Processor<Usage> processor) {
+          public void generate(@NotNull final Processor<Usage> processor) {
             ApplicationManager.getApplication().runReadAction(new Runnable() {
               @Override
               public void run() {
@@ -288,7 +289,7 @@ public abstract class BaseRefactoringProcessor {
   }
 
   private boolean ensureElementsWritable(@NotNull final UsageInfo[] usages, final UsageViewDescriptor descriptor) {
-    Set<PsiElement> elements = new THashSet<PsiElement>();
+    Set<PsiElement> elements = new THashSet<PsiElement>(TObjectHashingStrategy.IDENTITY); // protect against poorly implemented equality
     for (UsageInfo usage : usages) {
       assert usage != null: "Found null element in usages array";
       if (skipNonCodeUsages() && usage.isNonCodeUsage()) continue;
@@ -521,6 +522,7 @@ public abstract class BaseRefactoringProcessor {
     }
   }
 
+  @Override
   public final void run() {
     if (ApplicationManager.getApplication().isUnitTestMode()) {
       ApplicationManager.getApplication().assertIsDispatchThread();

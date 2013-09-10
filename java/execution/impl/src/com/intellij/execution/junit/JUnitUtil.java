@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,6 +45,7 @@ public class JUnitUtil {
   @NonNls public static final String TEST_ANNOTATION = "org.junit.Test";
   @NonNls public static final String IGNORE_ANNOTATION = "org.junit.Ignore";
   @NonNls public static final String RUN_WITH = "org.junit.runner.RunWith";
+  @NonNls public static final String DATA_POINT = "org.junit.experimental.theories.DataPoint";
   @NonNls public static final String SUITE_METHOD_NAME = "suite";
   public static final String BEFORE_ANNOTATION_NAME = "org.junit.Before";
   public static final String AFTER_ANNOTATION_NAME = "org.junit.After";
@@ -77,6 +78,7 @@ public class JUnitUtil {
     if (psiMethod.isConstructor()) return false;
     if (!psiMethod.hasModifierProperty(PsiModifier.PUBLIC)) return false;
     if (psiMethod.hasModifierProperty(PsiModifier.ABSTRACT)) return false;
+    if (AnnotationUtil.isAnnotated(psiMethod, DATA_POINT, false)) return false;
     if (AnnotationUtil.isAnnotated(aClass, RUN_WITH, true)) return true;
     if (psiMethod.getParameterList().getParametersCount() > 0) return false;
     if (psiMethod.hasModifierProperty(PsiModifier.STATIC) && SUITE_METHOD_NAME.equals(psiMethod.getName())) return false;
@@ -157,6 +159,7 @@ public class JUnitUtil {
   @Nullable
   private static PsiClass getTestCaseClassOrNull(final Location<?> location) {
     final Location<PsiClass> ancestorOrSelf = location.getAncestorOrSelf(PsiClass.class);
+    if (ancestorOrSelf == null) return null;
     final PsiClass aClass = ancestorOrSelf.getPsiElement();
     Module module = JavaExecutionUtil.findModule(aClass);
     if (module == null) return null;

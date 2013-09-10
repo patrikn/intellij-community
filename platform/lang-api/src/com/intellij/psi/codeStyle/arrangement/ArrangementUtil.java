@@ -157,7 +157,7 @@ public class ArrangementUtil {
     condition.invite(new ArrangementMatchConditionVisitor() {
       @Override
       public void visit(@NotNull ArrangementAtomMatchCondition condition) {
-        if (StdArrangementTokens.EntryType.is(condition.getType())) {
+        if (StdArrangementTokenType.ENTRY_TYPE.is(condition.getType())) {
           result.set(condition.getType());
         }
       }
@@ -248,10 +248,10 @@ public class ArrangementUtil {
 
   @Nullable
   public static ArrangementEntryMatcher buildMatcher(@NotNull ArrangementAtomMatchCondition condition) {
-    if (StdArrangementTokens.EntryType.is(condition.getType())) {
+    if (StdArrangementTokenType.ENTRY_TYPE.is(condition.getType())) {
       return new ByTypeArrangementEntryMatcher(condition.getType());
     }
-    else if (StdArrangementTokens.Modifier.is(condition.getType())) {
+    else if (StdArrangementTokenType.MODIFIER.is(condition.getType())) {
       return new ByModifierArrangementEntryMatcher(condition.getType());
     }
     else if (StdArrangementTokens.Regexp.NAME.equals(condition.getType())) {
@@ -291,5 +291,12 @@ public class ArrangementUtil {
       toProcess.addAll(token.getChildren());
     }
     return result;
+  }
+
+  @NotNull
+  public static List<? extends ArrangementMatchRule> getRulesSortedByPriority(@NotNull ArrangementSettings arrangementSettings) {
+    return arrangementSettings instanceof RulePriorityAwareSettings ?
+           ((RulePriorityAwareSettings)arrangementSettings).getRulesSortedByPriority() :
+           arrangementSettings.getRules();
   }
 }

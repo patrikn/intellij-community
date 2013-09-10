@@ -226,8 +226,6 @@ public interface GroovyElementTypes extends GroovyTokenTypes, GroovyDocElementTy
 
   GroovyElementType PATH_INDEX_PROPERTY = new GroovyElementType("Index property");
   GroovyElementType PARENTHESIZED_EXPRESSION = new GroovyElementType("Parenthesized expression");
-  // Plain label
-  GroovyElementType LABEL = new GroovyElementType("Label");
 
   // Arguments
   GroovyElementType ARGUMENTS = new GroovyElementType("Arguments");
@@ -251,7 +249,9 @@ public interface GroovyElementTypes extends GroovyTokenTypes, GroovyDocElementTy
 
   // GStrings
   GroovyElementType GSTRING = new GroovyElementType("GString");
-  IElementType GSTRING_INJECTION =new GroovyElementType("Gstring injection");
+  GroovyElementType GSTRING_INJECTION =new GroovyElementType("Gstring injection");
+  GroovyElementType GSTRING_CONTENT = new GroovyElementType("GString content element");
+
 
   GroovyElementType REGEX = new GroovyElementType("Regular expression");
   //types

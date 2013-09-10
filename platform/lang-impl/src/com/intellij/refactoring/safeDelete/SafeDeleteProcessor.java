@@ -31,7 +31,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.psi.util.PsiUtilBase;
+import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.refactoring.BaseRefactoringProcessor;
 import com.intellij.refactoring.RefactoringBundle;
 import com.intellij.refactoring.safeDelete.usageInfo.SafeDeleteCustomUsageInfo;
@@ -317,7 +317,7 @@ public class SafeDeleteProcessor extends BaseRefactoringProcessor {
               }
             }
             if(!elements.isEmpty()) {
-              SafeDeleteHandler.invoke(myProject, PsiUtilBase.toPsiElementArray(elements), true);
+              SafeDeleteHandler.invoke(myProject, PsiUtilCore.toPsiElementArray(elements), true);
             }
           }
         });
@@ -435,7 +435,7 @@ public class SafeDeleteProcessor extends BaseRefactoringProcessor {
     return super.isToBeChanged(usageInfo);
   }
 
-  public static boolean validElement(PsiElement element) {
+  public static boolean validElement(@NotNull PsiElement element) {
     if (element instanceof PsiFile) return true;
     if (!element.isPhysical()) return false;
     final RefactoringSupportProvider provider = LanguageRefactoringSupport.INSTANCE.forLanguage(element.getLanguage());
@@ -466,7 +466,7 @@ public class SafeDeleteProcessor extends BaseRefactoringProcessor {
     }
 
     return new SafeDeleteProcessor(project, prepareSuccessfulCallBack,
-                                   PsiUtilBase.toPsiElementArray(elements),
+                                   PsiUtilCore.toPsiElementArray(elements),
                                    isSearchInComments, isSearchNonJava);
   }
 

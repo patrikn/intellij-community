@@ -40,12 +40,16 @@ import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.*;
+import com.intellij.openapi.util.Pair;
+import com.intellij.openapi.util.ProperTextRange;
+import com.intellij.openapi.util.Segment;
+import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
-import com.intellij.psi.impl.PsiDocumentManagerImpl;
+import com.intellij.psi.impl.PsiDocumentManagerBase;
 import com.intellij.psi.impl.source.resolve.FileContextUtil;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.Processor;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ConcurrentHashMap;
@@ -104,11 +108,7 @@ public class InjectedLanguageManagerImpl extends InjectedLanguageManager impleme
     final ExtensionPoint<LanguageInjector> psiManagerPoint = Extensions.getRootArea().getExtensionPoint(LanguageInjector.EXTENSION_POINT_NAME);
     psiManagerPoint.addExtensionPointListener(myListener,this);
     myProgress = new DaemonProgressIndicator();
-    project.getMessageBus().connect(this).subscribe(DaemonCodeAnalyzer.DAEMON_EVENT_TOPIC, new DaemonCodeAnalyzer.DaemonListener() {
-      @Override
-      public void daemonFinished() {
-      }
-
+    project.getMessageBus().connect(this).subscribe(DaemonCodeAnalyzer.DAEMON_EVENT_TOPIC, new DaemonCodeAnalyzer.DaemonListenerAdapter() {
       @Override
       public void daemonCancelEventOccurred() {
         myProgress.cancel();
@@ -120,6 +120,7 @@ public class InjectedLanguageManagerImpl extends InjectedLanguageManager impleme
   public void dispose() {
   }
 
+  @Override
   public void startRunInjectors(@NotNull final Document hostDocument, final boolean synchronously) {
     if (myProject.isDisposed()) return;
     if (!synchronously && ApplicationManager.getApplication().isWriteAccessAllowed()) return;
@@ -159,7 +160,7 @@ public class InjectedLanguageManagerImpl extends InjectedLanguageManager impleme
           @Override
           public void visit(@NotNull PsiFile injectedPsi, @NotNull List<PsiLanguageInjectionHost.Shred> places) {
             stillInjectedDocument[0] = (DocumentWindow)injectedPsi.getViewProvider().getDocument();
-            PsiDocumentManagerImpl.checkConsistency(injectedPsi, stillInjectedDocument[0]);
+            PsiDocumentManagerBase.checkConsistency(injectedPsi, stillInjectedDocument[0]);
           }
         });
         synchronized (PsiLock.LOCK) {
@@ -179,8 +180,7 @@ public class InjectedLanguageManagerImpl extends InjectedLanguageManager impleme
       @Override
       public void run() {
         if (myProgress.isCanceled()) return;
-        JobLauncher.getInstance().invokeConcurrentlyUnderProgress(new ArrayList<DocumentWindow>(injected), myProgress, !synchronously,
-                                                                  commitProcessor);
+        JobLauncher.getInstance().invokeConcurrentlyUnderProgress(new ArrayList<DocumentWindow>(injected), myProgress, true, commitProcessor);
       }
     };
 
@@ -282,7 +282,7 @@ public class InjectedLanguageManagerImpl extends InjectedLanguageManager impleme
     while (iterator.hasNext()) {
       Map.Entry<Class,MultiHostInjector[]> entry = iterator.next();
       MultiHostInjector[] infos = entry.getValue();
-      int i = ArrayUtil.find(infos, injector);
+      int i = ArrayUtilRt.find(infos, injector);
       if (i != -1) {
         MultiHostInjector[] newInfos = ArrayUtil.remove(infos, i);
         if (newInfos.length == 0) {
@@ -300,7 +300,8 @@ public class InjectedLanguageManagerImpl extends InjectedLanguageManager impleme
 
 
   @Override
-  public String getUnescapedText(@NotNull final PsiElement injectedNode) {
+  public String
+  getUnescapedText(@NotNull final PsiElement injectedNode) {
     final StringBuilder text = new StringBuilder(injectedNode.getTextLength());
     // gather text from (patched) leaves
     injectedNode.accept(new PsiRecursiveElementWalkingVisitor() {
@@ -368,7 +369,7 @@ public class InjectedLanguageManagerImpl extends InjectedLanguageManager impleme
   }
 
   @Override
-  public boolean isInjectedFragment(final PsiFile file) {
+  public boolean isInjectedFragment(@NotNull final PsiFile file) {
     return file.getViewProvider() instanceof InjectedFileViewProvider;
   }
 
@@ -387,6 +388,25 @@ public class InjectedLanguageManagerImpl extends InjectedLanguageManager impleme
     return InjectedLanguageUtil.getTopLevelFile(element);
   }
 
+  @NotNull
+  @Override
+  public List<DocumentWindow> getCachedInjectedDocuments(@NotNull PsiFile hostPsiFile) {
+    return InjectedLanguageUtil.getCachedInjectedDocuments(hostPsiFile);
+  }
+
+  @Override
+  public void enumerate(@NotNull PsiElement host, @NotNull PsiLanguageInjectionHost.InjectedPsiVisitor visitor) {
+    InjectedLanguageUtil.enumerate(host, visitor);
+  }
+
+  @Override
+  public void enumerateEx(@NotNull PsiElement host,
+                          @NotNull PsiFile containingFile,
+                          boolean probeUp,
+                          @NotNull PsiLanguageInjectionHost.InjectedPsiVisitor visitor) {
+    InjectedLanguageUtil.enumerate(host, containingFile, probeUp, visitor);
+  }
+
   private final Map<Class,MultiHostInjector[]> myInjectorsClone = new HashMap<Class, MultiHostInjector[]>();
   @TestOnly
   public static void pushInjectors(@NotNull Project project) {
@@ -403,7 +423,9 @@ public class InjectedLanguageManagerImpl extends InjectedLanguageManager impleme
   @TestOnly
   public static void checkInjectorsAreDisposed(@NotNull Project project) {
     InjectedLanguageManagerImpl cachedManager = (InjectedLanguageManagerImpl)project.getUserData(INSTANCE_CACHE);
-    if (cachedManager == null) return;
+    if (cachedManager == null) {
+      return;
+    }
     try {
       for (Map.Entry<Class, MultiHostInjector[]> entry : cachedManager.injectors.entrySet()) {
         Class key = entry.getKey();

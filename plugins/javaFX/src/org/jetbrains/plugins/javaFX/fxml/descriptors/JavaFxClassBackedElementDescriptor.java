@@ -2,7 +2,7 @@ package org.jetbrains.plugins.javaFX.fxml.descriptors;
 
 import com.intellij.codeInsight.AnnotationUtil;
 import com.intellij.codeInsight.daemon.Validator;
-import com.intellij.codeInsight.daemon.impl.analysis.GenericsHighlightUtil;
+import com.intellij.codeInsight.daemon.impl.analysis.JavaGenericsUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.text.StringUtil;
@@ -11,6 +11,7 @@ import com.intellij.psi.impl.source.xml.XmlAttributeImpl;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.*;
 import com.intellij.psi.xml.XmlAttribute;
+import com.intellij.psi.xml.XmlAttributeValue;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.Function;
@@ -274,7 +275,10 @@ public class JavaFxClassBackedElementDescriptor implements XmlElementDescriptor,
         private boolean acceptablePropertyType(PsiType fieldType) {
           return fieldType.equalsToText(CommonClassNames.JAVA_LANG_STRING) ||
                  (acceptPrimitive && fieldType instanceof PsiPrimitiveType) ||
-                 InheritanceUtil.isInheritor(fieldType, JavaFxCommonClassNames.JAVAFX_OBSERVABLE_LIST_PROPERTY) && GenericsHighlightUtil.getCollectionItemType(fieldType, myPsiClass.getResolveScope()) != null;
+                 InheritanceUtil.isInheritor(fieldType, JavaFxCommonClassNames.JAVAFX_OBSERVABLE_LIST_PROPERTY) && JavaGenericsUtil
+                                                                                                                     .getCollectionItemType(
+                                                                                                                       fieldType, myPsiClass
+                                                                                                                       .getResolveScope()) != null;
         }
       });
     if (fieldList != null) {
@@ -367,12 +371,34 @@ public class JavaFxClassBackedElementDescriptor implements XmlElementDescriptor,
         host.addMessage(((XmlAttributeImpl)attribute).getNameElement(), "fx:controller can only be applied to root element", ValidationHost.ErrorType.ERROR); //todo add delete/move to upper tag fix
       }
     }
-    final String canCoerceError = JavaFxPsiUtil.isClassAcceptable(parentTag, myPsiClass);
+    PsiClass aClass = myPsiClass;
+    final XmlAttribute constAttr = context.getAttribute(FxmlConstants.FX_CONSTANT);
+    if (constAttr != null) {
+      final PsiField constField = aClass.findFieldByName(constAttr.getValue(), false);
+      if (constField != null) {
+        aClass = PsiUtil.resolveClassInType(constField.getType());
+      }
+    } else {
+      final XmlAttribute factoryAttr = context.getAttribute(FxmlConstants.FX_FACTORY);
+      if (factoryAttr != null) {
+        final XmlAttributeValue valueElement = factoryAttr.getValueElement();
+        if (valueElement != null) {
+          final PsiReference reference = valueElement.getReference();
+          final PsiElement staticFactoryMethod = reference != null ? reference.resolve() : null;
+          if (staticFactoryMethod instanceof PsiMethod && 
+              ((PsiMethod)staticFactoryMethod).getParameterList().getParametersCount() == 0 && 
+              ((PsiMethod)staticFactoryMethod).hasModifierProperty(PsiModifier.STATIC)) {
+            aClass = PsiUtil.resolveClassInType(((PsiMethod)staticFactoryMethod).getReturnType());
+          }
+        }
+      }
+    }
+    final String canCoerceError = JavaFxPsiUtil.isClassAcceptable(parentTag, aClass);
     if (canCoerceError != null) {
       host.addMessage(context.getNavigationElement(), canCoerceError, ValidationHost.ErrorType.ERROR);
     }
-    if (myPsiClass != null && myPsiClass.isValid()) {
-      final String message = JavaFxPsiUtil.isAbleToInstantiate(myPsiClass);
+    if (aClass != null && aClass.isValid()) {
+      final String message = JavaFxPsiUtil.isAbleToInstantiate(aClass);
       if (message != null) {
         host.addMessage(context, message, ValidationHost.ErrorType.ERROR);
       }

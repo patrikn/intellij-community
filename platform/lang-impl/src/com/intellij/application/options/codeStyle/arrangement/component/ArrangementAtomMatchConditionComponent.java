@@ -23,15 +23,13 @@ import com.intellij.application.options.codeStyle.arrangement.util.InsetsPanel;
 import com.intellij.openapi.actionSystem.impl.ActionButton;
 import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.psi.codeStyle.arrangement.model.ArrangementAtomMatchCondition;
-import com.intellij.psi.codeStyle.arrangement.std.ArrangementSettingsToken;
-import com.intellij.psi.codeStyle.arrangement.std.ArrangementStandardSettingsManager;
-import com.intellij.psi.codeStyle.arrangement.std.ArrangementUiComponent;
-import com.intellij.psi.codeStyle.arrangement.std.StdArrangementTokens;
+import com.intellij.psi.codeStyle.arrangement.std.*;
 import com.intellij.ui.IdeBorderFactory;
 import com.intellij.ui.RoundedLineBorder;
 import com.intellij.ui.SimpleColoredComponent;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.util.Consumer;
+import com.intellij.util.containers.ContainerUtilRt;
 import com.intellij.util.ui.GridBag;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -40,6 +38,7 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseEvent;
+import java.util.Set;
 
 /**
  * {@link ArrangementUiComponent} for {@link ArrangementAtomMatchCondition} representation.
@@ -77,6 +76,8 @@ public class ArrangementAtomMatchConditionComponent implements ArrangementUiComp
     }
   };
 
+  @NotNull private final Set<ArrangementSettingsToken> myAvailableTokens = ContainerUtilRt.newHashSet();
+
   @NotNull private final BorderStrategy                myBorderStrategy;
   @NotNull private final String                        myText;
   @NotNull private final ArrangementColorsProvider     myColorsProvider;
@@ -90,9 +91,9 @@ public class ArrangementAtomMatchConditionComponent implements ArrangementUiComp
 
   @NotNull private Color myBackgroundColor;
 
-  @Nullable private Dimension myTextControlSize;
-  @Nullable private Rectangle myScreenBounds;
-  @Nullable private Listener  myListener;
+  @Nullable private final Dimension myTextControlSize;
+  @Nullable private       Rectangle myScreenBounds;
+  @Nullable private       Listener  myListener;
 
   private boolean myEnabled = true;
   private boolean mySelected;
@@ -105,9 +106,10 @@ public class ArrangementAtomMatchConditionComponent implements ArrangementUiComp
   {
     myColorsProvider = colorsProvider;
     myCondition = condition;
+    myAvailableTokens.add(condition.getType());
     myCloseCallback = closeCallback;
     ArrangementSettingsToken type = condition.getType();
-    if (StdArrangementTokens.Regexp.is(type)) {
+    if (StdArrangementTokenType.REG_EXP.is(type)) {
       myBorderStrategy = TEXT_BORDER_STRATEGY;
     }
     else {
@@ -116,7 +118,7 @@ public class ArrangementAtomMatchConditionComponent implements ArrangementUiComp
     if (type.equals(condition.getValue())) {
       myText = type.getRepresentationValue();
     }
-    else if (StdArrangementTokens.Regexp.is(type)) {
+    else if (StdArrangementTokenType.REG_EXP.is(type)) {
       myText = String.format("%s %s", type.getRepresentationValue().toLowerCase(), condition.getValue());
     }
     else {
@@ -126,7 +128,7 @@ public class ArrangementAtomMatchConditionComponent implements ArrangementUiComp
     myTextControl.append(myText, SimpleTextAttributes.fromTextAttributes(colorsProvider.getTextAttributes(type, false)));
     myTextControl.setOpaque(false);
     int maxWidth = manager.getWidth(type);
-    if (!StdArrangementTokens.Regexp.is(type) && maxWidth > 0) {
+    if (!StdArrangementTokenType.REG_EXP.is(type) && maxWidth > 0) {
       myTextControlSize = new Dimension(maxWidth, myTextControl.getPreferredSize().height);
     }
     else {
@@ -352,6 +354,12 @@ public class ArrangementAtomMatchConditionComponent implements ArrangementUiComp
   @Override
   public ArrangementSettingsToken getToken() {
     return myCondition.getType();
+  }
+
+  @NotNull
+  @Override
+  public Set<ArrangementSettingsToken> getAvailableTokens() {
+    return myAvailableTokens;
   }
 
   @Override

@@ -23,7 +23,10 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorFactory;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
-import com.intellij.openapi.editor.event.*;
+import com.intellij.openapi.editor.event.DocumentAdapter;
+import com.intellij.openapi.editor.event.DocumentEvent;
+import com.intellij.openapi.editor.event.EditorMouseEvent;
+import com.intellij.openapi.editor.event.EditorMouseEventArea;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.ex.EditorMarkupModel;
 import com.intellij.openapi.editor.highlighter.EditorHighlighter;
@@ -32,6 +35,7 @@ import com.intellij.openapi.editor.impl.EditorImpl;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.fileEditor.FileEditorManager;
+import com.intellij.openapi.fileEditor.impl.EditorHistoryManager;
 import com.intellij.openapi.fileEditor.impl.FileEditorManagerImpl;
 import com.intellij.openapi.fileTypes.FileTypeEvent;
 import com.intellij.openapi.fileTypes.FileTypeListener;
@@ -52,8 +56,6 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseEvent;
-import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
 
 /**
  * @author Anton Katilin
@@ -72,7 +74,6 @@ class TextEditorComponent extends JBLoadingPanel implements DataProvider{
 
   private final MyEditorMouseListener myEditorMouseListener;
   private final MyDocumentListener myDocumentListener;
-  private final MyEditorPropertyChangeListener myEditorPropertyChangeListener;
   private final MyVirtualFileListener myVirtualFileListener;
   @NotNull private final Editor myEditor;
 
@@ -99,7 +100,6 @@ class TextEditorComponent extends JBLoadingPanel implements DataProvider{
     myDocument.addDocumentListener(myDocumentListener);
 
     myEditorMouseListener = new MyEditorMouseListener();
-    myEditorPropertyChangeListener = new MyEditorPropertyChangeListener();
 
     myConnection = project.getMessageBus().connect();
     myConnection.subscribe(FileTypeManager.TOPIC, new MyFileTypeListener());
@@ -120,7 +120,7 @@ class TextEditorComponent extends JBLoadingPanel implements DataProvider{
    */
   void dispose(){
     myDocument.removeDocumentListener(myDocumentListener);
-
+    EditorHistoryManager.getInstance(myProject).updateHistoryEntry(myFile, false);
     disposeEditor(myEditor);
     myConnection.disconnect();
 
@@ -164,7 +164,6 @@ class TextEditorComponent extends JBLoadingPanel implements DataProvider{
     ((EditorEx) editor).setFile(myFile);
 
     editor.addEditorMouseListener(myEditorMouseListener);
-    ((EditorEx)editor).addPropertyChangeListener(myEditorPropertyChangeListener);
 
     ((EditorImpl) editor).setDropHandler(new FileDropHandler(editor));
 
@@ -179,7 +178,6 @@ class TextEditorComponent extends JBLoadingPanel implements DataProvider{
   private void disposeEditor(@NotNull Editor editor){
     EditorFactory.getInstance().releaseEditor(editor);
     editor.removeEditorMouseListener(myEditorMouseListener);
-    ((EditorEx)editor).removePropertyChangeListener(myEditorPropertyChangeListener);
   }
 
   /**
@@ -321,20 +319,6 @@ class TextEditorComponent extends JBLoadingPanel implements DataProvider{
     public void documentChanged(DocumentEvent e) {
       // document's timestamp is changed later on undo or PSI changes
       ApplicationManager.getApplication().invokeLater(myUpdateRunnable);
-    }
-  }
-
-  /**
-   * Gets event about insert/overwrite modes
-   */
-  private final class MyEditorPropertyChangeListener implements PropertyChangeListener {
-    @Override
-    public void propertyChange(final PropertyChangeEvent e) {
-      assertThread();
-      final String propertyName = e.getPropertyName();
-      if(EditorEx.PROP_INSERT_MODE.equals(propertyName) || EditorEx.PROP_COLUMN_MODE.equals(propertyName)){
-        updateStatusBar();
-      }
     }
   }
 

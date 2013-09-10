@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import com.intellij.codeInsight.completion.impl.CamelHumpMatcher;
 import com.intellij.codeInsight.completion.scope.CompletionElement;
 import com.intellij.codeInsight.completion.scope.JavaCompletionProcessor;
 import com.intellij.codeInsight.completion.util.ParenthesesInsertHandler;
-import com.intellij.codeInsight.daemon.impl.quickfix.StaticImportMethodFix;
 import com.intellij.codeInsight.guess.GuessManager;
 import com.intellij.codeInsight.lookup.*;
 import com.intellij.lang.StdLanguages;
@@ -125,7 +124,7 @@ public class JavaCompletionUtil {
   }
 
   public static boolean isInExcludedPackage(@NotNull final PsiMember member, boolean allowInstanceInnerClasses) {
-    final String name = StaticImportMethodFix.getMemberQualifiedName(member);
+    final String name = PsiUtil.getMemberQualifiedName(member);
     if (name == null) return false;
 
     if (!member.hasModifierProperty(PsiModifier.STATIC)) {
@@ -362,6 +361,7 @@ public class JavaCompletionUtil {
       PsiElement ctx = createContextWithXxxVariable(element, composite);
       javaReference = (PsiReferenceExpression) JavaPsiFacade.getElementFactory(element.getProject()).createExpressionFromText("xxx.xxx", ctx);
       qualifierType = runtimeQualifier;
+      processor.setQualifierType(qualifierType);
     }
 
     javaReference.processVariants(processor);
@@ -620,6 +620,9 @@ public class JavaCompletionUtil {
     if (element instanceof PsiJavaCodeReferenceElement) {
       return mayHaveSideEffects(((PsiJavaCodeReferenceElement)element).getQualifier());
     }
+    if (element instanceof PsiParenthesizedExpression) {
+      return mayHaveSideEffects(((PsiParenthesizedExpression)element).getExpression());
+    }
     return true;
   }
 
@@ -677,7 +680,7 @@ public class JavaCompletionUtil {
           documentManager.doPostponedOperationsAndUnblockDocument(document);
           documentManager.commitDocument(document);
 
-          newElement = CodeInsightUtilBase.findElementInRange(file, rangeMarker.getStartOffset(), rangeMarker.getEndOffset(),
+          newElement = CodeInsightUtilCore.findElementInRange(file, rangeMarker.getStartOffset(), rangeMarker.getEndOffset(),
                                                               PsiJavaCodeReferenceElement.class,
                                                               JavaLanguage.INSTANCE);
           rangeMarker.dispose();
@@ -764,12 +767,14 @@ public class JavaCompletionUtil {
       context.setAddCompletionChar(false);
     }
 
-    final boolean needRightParenth = forceClosingParenthesis || !smart && (CodeInsightSettings.getInstance().AUTOINSERT_PAIR_BRACKET || hasTail);
     if (hasTail) {
       hasParams = false;
     }
+    final boolean needRightParenth = forceClosingParenthesis ||
+                                     !smart && (CodeInsightSettings.getInstance().AUTOINSERT_PAIR_BRACKET ||
+                                                !hasParams && completionChar != '(');
 
-    PsiDocumentManager.getInstance(context.getProject()).commitDocument(context.getDocument());
+    context.commitDocument();
 
     final CommonCodeStyleSettings styleSettings = context.getCodeStyleSettings();
     final PsiElement elementAt = file.findElementAt(context.getStartOffset());
@@ -837,8 +842,11 @@ public class JavaCompletionUtil {
     final PsiDocumentManager manager = PsiDocumentManager.getInstance(file.getProject());
     manager.commitDocument(manager.getDocument(file));
     final PsiReference ref = file.findReferenceAt(offset);
-    if (ref instanceof PsiJavaCodeReferenceElement) {
-      JavaCodeStyleManager.getInstance(file.getProject()).shortenClassReferences((PsiJavaCodeReferenceElement)ref);
+    if (ref != null) {
+      PsiElement element = ref.getElement();
+      if (element != null) {
+        JavaCodeStyleManager.getInstance(file.getProject()).shortenClassReferences(element);
+      }
     }
   }
 

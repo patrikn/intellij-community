@@ -18,6 +18,7 @@ package com.intellij.util.xmlb;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.JDOMUtil;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.xmlb.annotations.OptionTag;
 import org.jdom.Attribute;
@@ -59,11 +60,14 @@ class OptionTagBinding implements Binding {
     }
   }
 
+  @Override
   public Object serialize(Object o, Object context, SerializationFilter filter) {
     Element targetElement = new Element(myTagName);
     Object value = accessor.read(o);
 
-    targetElement.setAttribute(myNameAttribute, myName);
+    if (!StringUtil.isEmpty(myNameAttribute)) {
+      targetElement.setAttribute(myNameAttribute, myName);
+    }
 
     if (value == null) return targetElement;
 
@@ -81,6 +85,7 @@ class OptionTagBinding implements Binding {
     return targetElement;
   }
 
+  @Override
   public Object deserialize(Object o, @NotNull Object... nodes) {
     if (nodes.length > 1) {
       LOG.info("Duplicate options for " + o + " will be ignored");
@@ -115,18 +120,24 @@ class OptionTagBinding implements Binding {
     return o;
   }
 
+  @Override
   public boolean isBoundTo(Object node) {
     if (!(node instanceof Element)) return false;
     Element e = (Element)node;
     if (!e.getName().equals(myTagName)) return false;
     String name = e.getAttributeValue(myNameAttribute);
+    if (StringUtil.isEmpty(myNameAttribute)) {
+      return name == null || name.equals(myName);
+    }
     return name != null && name.equals(myName);
   }
 
+  @Override
   public Class getBoundNodeType() {
     throw new UnsupportedOperationException("Method getBoundNodeType is not supported in " + getClass());
   }
 
+  @Override
   public void init() {
   }
 

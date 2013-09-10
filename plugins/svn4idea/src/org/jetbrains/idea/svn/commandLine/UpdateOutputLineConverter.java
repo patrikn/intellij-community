@@ -15,6 +15,7 @@
  */
 package org.jetbrains.idea.svn.commandLine;
 
+import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import org.jetbrains.annotations.Nullable;
 import org.tmatesoft.svn.core.SVNErrorCode;
@@ -36,6 +37,10 @@ import java.util.regex.Pattern;
  * Time: 5:13 PM
  */
 public class UpdateOutputLineConverter {
+
+  private final static String MERGING = "--- Merging";
+  private final static String RECORDING_MERGE_INFO = "--- Recording mergeinfo";
+
   private final static String UPDATING = "Updating";
   private final static String AT_REVISION = "At revision (\\d+)\\.";
   private final static String UPDATED_TO_REVISION = "Updated to revision (\\d+)\\.";
@@ -48,23 +53,33 @@ public class UpdateOutputLineConverter {
   
   private final static Pattern ourAtRevision = Pattern.compile(AT_REVISION);
   private final static Pattern ourUpdatedToRevision = Pattern.compile(UPDATED_TO_REVISION);
+  private final static Pattern ourCheckedOutRevision = Pattern.compile("Checked out revision (\\d+)\\.");
 
   private final static Pattern ourExternal = Pattern.compile(EXTERNAL);
   private final static Pattern ourUpdatedExternal = Pattern.compile(UPDATED_EXTERNAL);
-  
-  private final static Pattern[] ourCompletePatterns = new Pattern[] {ourAtRevision, ourUpdatedToRevision, ourExternal, ourUpdatedExternal};
+  private final static Pattern ourCheckedOutExternal = Pattern.compile("Checked out external at revision (\\d+)\\.");
+
+  private final static Pattern[] ourCompletePatterns =
+    new Pattern[]{ourAtRevision, ourUpdatedToRevision, ourCheckedOutRevision, ourExternal, ourUpdatedExternal, ourCheckedOutExternal};
 
   private final File myBase;
   private File myCurrentFile;
 
   public UpdateOutputLineConverter(File base) {
     myBase = base;
+    // checkout output does not have special line like "Updating '.'" on start - so set current file directly
+    // to correctly detect complete event
+    myCurrentFile = base;
   }
 
   public SVNEvent convert(final String line) {
+    // TODO: Add direct processing of "Summary of conflicts" lines at the end of "svn update" output (if there are conflicts).
+    // TODO: Now it works ok because parseNormalLine could not determine necessary statuses from that and further lines
     if (StringUtil.isEmptyOrSpaces(line)) return null;
 
-    if (line.startsWith(UPDATING)) {
+    if (line.startsWith(MERGING) || line.startsWith(RECORDING_MERGE_INFO)) {
+      return null;
+    } else if (line.startsWith(UPDATING)) {
       myCurrentFile = parseForPath(line);
       return new SVNEvent(myCurrentFile, myCurrentFile == null ? null : (myCurrentFile.isDirectory() ? SVNNodeKind.DIR : SVNNodeKind.FILE),
                     null, -1, null, null, null, null, SVNEventAction.UPDATE_NONE, SVNEventAction.UPDATE_NONE, null, null, null, null, null);
@@ -73,6 +88,7 @@ public class UpdateOutputLineConverter {
       return new SVNEvent(myCurrentFile, myCurrentFile == null ? null : (myCurrentFile.isDirectory() ? SVNNodeKind.DIR : SVNNodeKind.FILE),
                           null, -1, null, null, null, null, SVNEventAction.RESTORE, SVNEventAction.RESTORE, null, null, null, null, null);
     } else if (line.startsWith(SKIPPED)) {
+      // called, for instance, when folder is not working copy
       myCurrentFile = parseForPath(line);
       final String comment = parseComment(line);
       return new SVNEvent(myCurrentFile, myCurrentFile == null ? null : (myCurrentFile.isDirectory() ? SVNNodeKind.DIR : SVNNodeKind.FILE),
@@ -88,8 +104,12 @@ public class UpdateOutputLineConverter {
       final Pattern pattern = ourCompletePatterns[i];
       final long revision = matchAndGetRevision(pattern, line);
       if (revision != -1) {
-        return new SVNEvent(myCurrentFile, myCurrentFile == null ? null : (myCurrentFile.isDirectory() ? SVNNodeKind.DIR : SVNNodeKind.FILE),
-                    null, revision, null, null, null, null, SVNEventAction.UPDATE_COMPLETED, SVNEventAction.UPDATE_COMPLETED, null, null, null, null, null);
+        // TODO: seems that myCurrentFile will not always be correct - complete update message could be right after complete externals update
+        // TODO: check this and use Stack instead
+        return new SVNEvent(myCurrentFile,
+                            myCurrentFile == null ? null : (myCurrentFile.isDirectory() ? SVNNodeKind.DIR : SVNNodeKind.FILE),
+                            null, revision, null, null, null, null, SVNEventAction.UPDATE_COMPLETED, SVNEventAction.UPDATE_COMPLETED, null,
+                            null, null, null, null);
       }
     }
 
@@ -103,9 +123,9 @@ public class UpdateOutputLineConverter {
     if (line.length() < 5) return null;
     final char first = line.charAt(0);
     if (' ' != first && ! ourActions.contains(first)) return null;
-    final SVNStatusType contentsStatus = getStatusType(first);
+    final SVNStatusType contentsStatus = CommandUtil.getStatusType(first);
     final char second = line.charAt(1);
-    final SVNStatusType propertiesStatus = getStatusType(second);
+    final SVNStatusType propertiesStatus = CommandUtil.getStatusType(second);
     final char lock = line.charAt(2); // dont know what to do with stolen lock info
     if (' ' != lock && 'B' != lock) return null;
     final char treeConflict = line.charAt(3);
@@ -114,7 +134,7 @@ public class UpdateOutputLineConverter {
 
     final String path = line.substring(4).trim();
     if (StringUtil.isEmptyOrSpaces(path)) return null;
-    final File file = new File(myBase, path);
+    final File file = createFile(path);
     if (SVNStatusType.STATUS_OBSTRUCTED.equals(contentsStatus)) {
       // obstructed
       return new SVNEvent(file, file.isDirectory() ? SVNNodeKind.DIR : SVNNodeKind.FILE,
@@ -140,26 +160,8 @@ public class UpdateOutputLineConverter {
                         null, action, expectedAction, null, null, null, null, null);
   }
 
-  private SVNStatusType getStatusType(char first) {
-    final SVNStatusType contentsStatus;
-    if ('A' == first) {
-      contentsStatus = SVNStatusType.STATUS_ADDED;
-    } else if ('D' == first) {
-      contentsStatus = SVNStatusType.STATUS_DELETED;
-    } else if ('U' == first) {
-      contentsStatus = SVNStatusType.CHANGED;
-    } else if ('C' == first) {
-      contentsStatus = SVNStatusType.CONFLICTED;
-    } else if ('G' == first) {
-      contentsStatus = SVNStatusType.MERGED;
-    } else if ('R' == first) {
-      contentsStatus = SVNStatusType.STATUS_REPLACED;
-    } else if ('E' == first) {
-      contentsStatus = SVNStatusType.STATUS_OBSTRUCTED;
-    } else {
-      contentsStatus = SVNStatusType.STATUS_NORMAL;
-    }
-    return contentsStatus;
+  private File createFile(String path) {
+    return FileUtil.isAbsolute(path) ? new File(path) : new File(myBase, path);
   }
 
   @Nullable
@@ -194,6 +196,6 @@ public class UpdateOutputLineConverter {
     if (idx2 == -1) return null;
     final String substring = line.substring(idx1 + 1, idx2);
     if (".".equals(substring)) return myBase;
-    return new File(myBase, substring);
+    return createFile(substring);
   }
 }

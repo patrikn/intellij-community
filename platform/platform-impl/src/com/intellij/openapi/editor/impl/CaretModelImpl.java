@@ -42,6 +42,7 @@ import com.intellij.openapi.editor.ex.util.EditorUtil;
 import com.intellij.openapi.editor.impl.event.DocumentEventImpl;
 import com.intellij.openapi.editor.impl.softwrap.SoftWrapHelper;
 import com.intellij.openapi.editor.markup.TextAttributes;
+import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.EventDispatcher;
 import com.intellij.util.diff.FilesTooBigForDiffException;
@@ -117,11 +118,18 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
       @Override
       public void updateFinished(@NotNull Document doc) {
         if (doc != myEditor.getDocument() || myIsInUpdate) return;
-        if (savedBeforeBulkCaretMarker != null && savedBeforeBulkCaretMarker.isValid()
-            && savedBeforeBulkCaretMarker.getStartOffset() != myOffset && !myReportCaretMoves) {
-          moveToOffset(savedBeforeBulkCaretMarker.getStartOffset());
+        LOG.assertTrue(!myReportCaretMoves);
+
+        if (savedBeforeBulkCaretMarker != null) {
+          if(savedBeforeBulkCaretMarker.isValid()) {
+            if(savedBeforeBulkCaretMarker.getStartOffset() != myOffset) {
+              moveToOffset(savedBeforeBulkCaretMarker.getStartOffset());
+            }
+          } else if (myOffset > doc.getTextLength()) {
+            moveToOffset(doc.getTextLength());
+          }
+          releaseBulkCaretMarker();
         }
-        releaseBulkCaretMarker();
       }
     };
     ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(DocumentBulkUpdateListener.TOPIC, bulkUpdateListener);
@@ -144,6 +152,10 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
     if (myReportCaretMoves) {
       LogMessageEx.error(LOG, "Unexpected caret move request");
     }
+    if (!myEditor.isStickySelection()) {
+      CopyPasteManager.getInstance().stopKillRings();
+    }
+
     myDesiredX = -1;
     int column = pos.column;
     int line = pos.line;
@@ -258,6 +270,9 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
     }
     if (myReportCaretMoves) {
       LogMessageEx.error(LOG, "Unexpected caret move request");
+    }
+    if (!myEditor.isStickySelection()) {
+      CopyPasteManager.getInstance().stopKillRings();
     }
     SelectionModelImpl selectionModel = myEditor.getSelectionModel();
     final int leadSelectionOffset = selectionModel.getLeadSelectionOffset();
@@ -426,6 +441,10 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
     if (myReportCaretMoves) {
       LogMessageEx.error(LOG, "Unexpected caret move request");
     }
+    if (!myEditor.isStickySelection()) {
+      CopyPasteManager.getInstance().stopKillRings();
+    }
+
     myReportCaretMoves = true;
     try {
       return doMoveToLogicalPosition(pos, locateBeforeSoftWrap, debugBuffer, fireListeners);

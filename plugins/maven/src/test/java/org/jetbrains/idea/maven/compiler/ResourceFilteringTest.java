@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,12 @@
  */
 package org.jetbrains.idea.maven.compiler;
 
-import com.intellij.openapi.application.Result;
-import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.fileTypes.FileTypes;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.idea.maven.MavenImportingTestCase;
-import org.jetbrains.idea.maven.importing.MavenDefaultModifiableModelsProvider;
-import org.jetbrains.idea.maven.importing.MavenRootModelAdapter;
 
 import java.io.File;
 import java.io.IOException;
@@ -305,50 +301,6 @@ public abstract class ResourceFilteringTest extends MavenImportingTestCase {
     assertResult("target/classes/file1.properties", "value=${project.artifactId}");
     assertResult("target/classes/file2.properties", "value=project");
   }
-
-  public void testWorkCorrectlyIfFoldersMarkedAsSource() throws Exception {
-    createProjectSubFile("src/main/resources/file1.properties", "value=${project.artifactId}");
-    createProjectSubFile("src/main/ideaRes/file2.properties", "value=${project.artifactId}");
-
-    importProject("<groupId>test</groupId>" +
-                  "<artifactId>project</artifactId>" +
-                  "<version>1</version>" +
-
-                  "<build>" +
-                  "  <resources>" +
-                  "    <resource>" +
-                  "      <directory>src/main/resources</directory>" +
-                  "      <filtering>true</filtering>" +
-                  "    </resource>" +
-                  "  </resources>" +
-                  "</build>");
-
-    new WriteAction() {
-      protected void run(Result result) throws Throwable {
-        MavenRootModelAdapter adapter = new MavenRootModelAdapter(myProjectsTree.findProject(myProjectPom),
-                                                                  getModule("project"),
-                                                                  new MavenDefaultModifiableModelsProvider(myProject));
-        adapter.addSourceFolder(myProjectRoot.findFileByRelativePath("src/main/resources").getPath(), false);
-        adapter.addSourceFolder(myProjectRoot.findFileByRelativePath("src/main/ideaRes").getPath(), false);
-        adapter.getRootModel().commit();
-      }
-    }.execute();
-
-    assertSources("project", "src/main/resources", "src/main/ideaRes");
-
-    compileModules("project");
-
-    assertResult("target/classes/file1.properties", "value=project");
-    if (useJps()) {
-       // in jps only maven resource builder works for mavenized modules, so the file should not be copied at all
-      File file = new File(myProjectPom.getParent().getPath(), "target/classes/file2.properties");
-      assertFalse("The file should not be copied " + file.getPath(), file.exists());
-    }
-    else {
-      assertResult("target/classes/file2.properties", "value=${project.artifactId}");
-    }
-  }
-
 
   public void testEscapingWindowsChars() throws Exception {
     createProjectSubFile("resources/file.txt", "value=${foo}\n" +
@@ -1038,20 +990,13 @@ public abstract class ResourceFilteringTest extends MavenImportingTestCase {
     assertResult(myProjectPom, relativePath, content);
   }
 
-  private String loadResult(VirtualFile pomFile, String relativePath) throws IOException {
-    if (useJps()) {
-      File file = new File(pomFile.getParent().getPath(), relativePath);
-      assertTrue("file not found: " + relativePath, file.exists());
-      return new String(FileUtil.loadFileText(file));
-    }
-    else {
-      VirtualFile file = pomFile.getParent().findFileByRelativePath(relativePath);
-      assertNotNull("file not found: " + relativePath, file);
-      return VfsUtil.loadText(file);
-    }
+  private static void assertResult(VirtualFile pomFile, String relativePath, String content) throws IOException {
+    assertEquals(content, loadResult(pomFile, relativePath));
   }
 
-  private void assertResult(VirtualFile pomFile, String relativePath, String content) throws IOException {
-    assertEquals(content, loadResult(pomFile, relativePath));
+  private static String loadResult(VirtualFile pomFile, String relativePath) throws IOException {
+    File file = new File(pomFile.getParent().getPath(), relativePath);
+    assertTrue("file not found: " + relativePath, file.exists());
+    return new String(FileUtil.loadFileText(file));
   }
 }

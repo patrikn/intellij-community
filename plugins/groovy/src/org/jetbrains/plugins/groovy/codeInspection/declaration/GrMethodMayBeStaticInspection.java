@@ -15,20 +15,19 @@
  */
 package org.jetbrains.plugins.groovy.codeInspection.declaration;
 
+import com.intellij.codeInspection.InspectionManager;
 import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.ui.MultipleCheckboxOptionsPanel;
-import com.intellij.openapi.extensions.ExtensionPoint;
-import com.intellij.openapi.extensions.Extensions;
-import com.intellij.openapi.extensions.ExtensionsArea;
 import com.intellij.openapi.util.Condition;
 import com.intellij.psi.*;
 import com.intellij.psi.search.searches.OverridingMethodsSearch;
 import com.intellij.psi.search.searches.SuperMethodsSearch;
-import org.jetbrains.plugins.groovy.annotator.intentions.GrModifierFix;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.codeInspection.BaseInspection;
 import org.jetbrains.plugins.groovy.codeInspection.BaseInspectionVisitor;
 import org.jetbrains.plugins.groovy.codeInspection.GroovyInspectionBundle;
+import org.jetbrains.plugins.groovy.codeInspection.bugs.GrModifierFix;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElement;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyRecursiveElementVisitor;
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
@@ -57,6 +56,7 @@ public class GrMethodMayBeStaticInspection extends BaseInspection {
     return optionsPanel;
   }
 
+  @NotNull
   @Override
   protected BaseInspectionVisitor buildVisitor() {
     return new BaseInspectionVisitor() {
@@ -93,9 +93,7 @@ public class GrMethodMayBeStaticInspection extends BaseInspection {
       return false;
     }
 
-    final ExtensionsArea rootArea = Extensions.getRootArea();
-    final ExtensionPoint<Condition<PsiElement>> extensionPoint = rootArea.getExtensionPoint("com.intellij.cantBeStatic");
-    final Condition<PsiElement>[] addins = extensionPoint.getExtensions();
+    final Condition<PsiElement>[] addins = InspectionManager.CANT_BE_STATIC_EXTENSION.getExtensions();
     for (Condition<PsiElement> addin : addins) {
       if (addin.value(method)) {
         return false;

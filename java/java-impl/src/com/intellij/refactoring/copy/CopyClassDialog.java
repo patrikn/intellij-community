@@ -38,6 +38,7 @@ import com.intellij.util.ui.FormBuilder;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.jps.model.java.JavaModuleSourceRootTypes;
 
 import javax.swing.*;
 import java.awt.*;
@@ -51,6 +52,8 @@ class CopyClassDialog extends DialogWrapper{
   private final Project myProject;
   private final boolean myDoClone;
   private final PsiDirectory myDefaultTargetDirectory;
+  private final JCheckBox myOpenInEditorCb = CopyFilesOrDirectoriesDialog.createOpenInEditorCB();
+
   private final DestinationFolderComboBox myDestinationCB = new DestinationFolderComboBox() {
     @Override
     public String getTargetPackage() {
@@ -112,16 +115,19 @@ class CopyClassDialog extends DialogWrapper{
     }
 
     final JLabel label = new JLabel(RefactoringBundle.message("target.destination.folder"));
-    final boolean isMultipleSourceRoots = ProjectRootManager.getInstance(myProject).getContentSourceRoots().length > 1;
+    final boolean isMultipleSourceRoots = ProjectRootManager.getInstance(myProject).getModuleSourceRoots(JavaModuleSourceRootTypes.SOURCES).size() > 1;
     myDestinationCB.setVisible(!myDoClone && isMultipleSourceRoots);
     label.setVisible(!myDoClone && isMultipleSourceRoots);
     label.setLabelFor(myDestinationCB);
 
+    final JPanel panel = new JPanel(new BorderLayout());
+    panel.add(myOpenInEditorCb, BorderLayout.EAST);
     return FormBuilder.createFormBuilder()
       .addComponent(myInformationLabel)
       .addLabeledComponent(RefactoringBundle.message("copy.files.new.name.label"), myNameField, UIUtil.LARGE_VGAP)
       .addLabeledComponent(myPackageLabel, myTfPackage)
       .addLabeledComponent(label, myDestinationCB)
+      .addComponent(panel)
       .getPanel();
   }
 
@@ -142,6 +148,10 @@ class CopyClassDialog extends DialogWrapper{
 
   public String getClassName() {
     return myNameField.getText();
+  }
+  
+  public boolean openInEditor() {
+    return myOpenInEditorCb.isSelected();
   }
 
   protected void doOKAction(){
@@ -179,6 +189,7 @@ class CopyClassDialog extends DialogWrapper{
       myNameField.requestFocusInWindow();
       return;
     }
+    CopyFilesOrDirectoriesDialog.saveOpenInEditorState(myOpenInEditorCb.isSelected());
     super.doOKAction();
   }
 

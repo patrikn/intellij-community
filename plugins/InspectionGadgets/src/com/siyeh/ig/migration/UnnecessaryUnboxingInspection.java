@@ -18,8 +18,8 @@ package com.siyeh.ig.migration;
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
-import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
@@ -82,10 +82,17 @@ public class UnnecessaryUnboxingInspection extends BaseInspection {
 
   private static class UnnecessaryUnboxingFix extends InspectionGadgetsFix {
 
+    @Override
     @NotNull
     public String getName() {
       return InspectionGadgetsBundle.message(
         "unnecessary.unboxing.remove.quickfix");
+    }
+
+    @NotNull
+    @Override
+    public String getFamilyName() {
+      return getName();
     }
 
     @Override

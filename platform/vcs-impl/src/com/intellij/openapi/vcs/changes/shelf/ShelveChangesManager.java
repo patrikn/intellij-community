@@ -193,7 +193,7 @@ public class ShelveChangesManager extends AbstractProjectComponent implements JD
         if (big.contains(change)) continue;
         FilePath filePath = ChangesUtil.getFilePath(change);
         final AbstractVcs vcs = vcsManager.getVcsFor(filePath);
-        if (vcs != null && VcsType.distibuted.equals(vcs.getType())) {
+        if (vcs != null && VcsType.distributed.equals(vcs.getType())) {
           toKeep.add(filePath);
         }
       }
@@ -301,6 +301,7 @@ public class ShelveChangesManager extends AbstractProjectComponent implements JD
   private File getPatchPath(@NonNls final String commitMessage) {
     File file = myFileProcessor.getBaseIODir();
     if (!file.exists()) {
+      //noinspection ResultOfMethodCallIgnored
       file.mkdirs();
     }
 

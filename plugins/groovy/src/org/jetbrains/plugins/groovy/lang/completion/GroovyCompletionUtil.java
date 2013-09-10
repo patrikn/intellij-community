@@ -16,7 +16,7 @@
 
 package org.jetbrains.plugins.groovy.lang.completion;
 
-import com.intellij.codeInsight.CodeInsightUtilBase;
+import com.intellij.codeInsight.CodeInsightUtilCore;
 import com.intellij.codeInsight.TailType;
 import com.intellij.codeInsight.completion.AllClassesGetter;
 import com.intellij.codeInsight.completion.JavaClassNameCompletionContributor;
@@ -32,11 +32,13 @@ import com.intellij.openapi.editor.RangeMarker;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.highlighter.HighlighterIterator;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Iconable;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
+import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.TokenSet;
 import com.intellij.psi.util.*;
@@ -48,7 +50,6 @@ import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.formatter.GeeseUtil;
-import org.jetbrains.plugins.groovy.lang.GrReferenceAdjuster;
 import org.jetbrains.plugins.groovy.lang.psi.GrControlFlowOwner;
 import org.jetbrains.plugins.groovy.lang.psi.GrReferenceElement;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFile;
@@ -248,6 +249,20 @@ public class GroovyCompletionUtil {
     return result;
   }
 
+  public static List<LookupElement> getCompletionVariants(List<GroovyResolveResult> candidates,
+                                                          boolean afterNew,
+                                                          PrefixMatcher matcher,
+                                                          PsiElement position) {
+    List<LookupElement> result = ContainerUtil.newArrayList();
+    for (GroovyResolveResult candidate : candidates) {
+      result.addAll(createLookupElements(candidate, afterNew, matcher, position));
+      ProgressManager.checkCanceled();
+    }
+
+    return result;
+  }
+
+
   public static List<? extends LookupElement> createLookupElements(GroovyResolveResult candidate,
                                                                    boolean afterNew,
                                                                    PrefixMatcher matcher,
@@ -286,7 +301,7 @@ public class GroovyCompletionUtil {
       }
     }
 
-    String name = element instanceof PsiNamedElement ? ((PsiNamedElement)element).getName() : element.getText();
+    String name = element instanceof PsiNamedElement ? ((PsiNamedElement)element).getName() :   element.getText();
     if (name == null || !matcher.prefixMatches(name)) {
       return Collections.emptyList();
     }
@@ -403,8 +418,16 @@ public class GroovyCompletionUtil {
     return type != null ? builder.withTypeText(type.getPresentableText()) : builder;
   }
 
-  public static boolean hasConstructorParameters(@NotNull PsiClass clazz, @NotNull GroovyPsiElement place) {
-    final GroovyResolveResult[] constructors = ResolveUtil.getAllClassConstructors(clazz, place, PsiSubstitutor.EMPTY, null);
+  public static boolean hasConstructorParameters(@NotNull PsiClass clazz, @NotNull PsiElement place) {
+    final GroovyResolveResult[] constructors = ResolveUtil.getAllClassConstructors(clazz, PsiSubstitutor.EMPTY, null, place);
+
+
+    boolean hasSetters = ContainerUtil.find(clazz.getAllMethods(), new Condition<PsiMethod>() {
+      @Override
+      public boolean value(PsiMethod method) {
+        return isSimplePropertySetter(method);
+      }
+    }) != null;
 
     boolean hasParameters = false;
     boolean hasAccessibleConstructors = false;
@@ -421,7 +444,7 @@ public class GroovyCompletionUtil {
       }
     }
 
-    return !hasAccessibleConstructors && hasParameters;
+    return !hasAccessibleConstructors && (hasParameters || hasSetters);
   }
 
   public static void addImportForItem(PsiFile file, int startOffset, LookupItem item) throws IncorrectOperationException {
@@ -482,7 +505,7 @@ public class GroovyCompletionUtil {
     if (ref instanceof GrReferenceElement && aClass.isValid()) {
       PsiElement newElement = ref.bindToElement(aClass);
       RangeMarker marker = document.createRangeMarker(newElement.getTextRange());
-      CodeInsightUtilBase.forcePsiPostprocessAndRestoreElement(newElement);
+      CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(newElement);
       newStartOffset = marker.getStartOffset();
     }
 
@@ -495,13 +518,14 @@ public class GroovyCompletionUtil {
 
   //need to shorten references in type argument list
   public static void shortenReference(final PsiFile file, final int offset) throws IncorrectOperationException {
-    final PsiDocumentManager manager = PsiDocumentManager.getInstance(file.getProject());
+    final Project project = file.getProject();
+    final PsiDocumentManager manager = PsiDocumentManager.getInstance(project);
     final Document document = manager.getDocument(file);
     assert document != null;
     manager.commitDocument(document);
     final PsiReference ref = file.findReferenceAt(offset);
     if (ref instanceof GrCodeReferenceElement) {
-      GrReferenceAdjuster.shortenReferences((GroovyPsiElement)ref);
+      JavaCodeStyleManager.getInstance(project).shortenClassReferences((GroovyPsiElement)ref);
     }
   }
 
@@ -575,7 +599,7 @@ public class GroovyCompletionUtil {
       PsiElement resolved = ref.resolve();
 
       if (resolved instanceof PsiClass) {
-        final GrAnnotation annotationCollector = GrAnnotationCollector.findAnnotationCollector((PsiClass)resolved);
+        final PsiAnnotation annotationCollector = GrAnnotationCollector.findAnnotationCollector((PsiClass)resolved);
 
         if (annotationCollector != null) {
           final ArrayList<GrAnnotation> annotations = ContainerUtil.newArrayList();

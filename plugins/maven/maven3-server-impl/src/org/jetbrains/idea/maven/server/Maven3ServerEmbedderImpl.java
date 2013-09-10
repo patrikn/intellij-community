@@ -164,6 +164,10 @@ public class Maven3ServerEmbedderImpl extends MavenRemoteObject implements Maven
 
     mySystemProperties = FieldAccessor.<Properties>get(cliRequestClass, cliRequest, "systemProperties");
 
+    if (settings.getProjectJdk() != null) {
+      mySystemProperties.setProperty("java.home", settings.getProjectJdk());
+    }
+
     myMavenSettings = buildSettings(FieldAccessor.<SettingsBuilder>get(MavenCli.class, cli, "settingsBuilder"),
                                     settings,
                                     mySystemProperties,
@@ -283,6 +287,13 @@ public class Maven3ServerEmbedderImpl extends MavenRemoteObject implements Maven
                                                    new ArrayList<String>(activeProfiles),
                                                    Arrays.<ResolutionListener>asList(listener));
     return createExecutionResult(file, result, listener.getRootNode());
+  }
+
+  @NotNull
+  @Override
+  public String evaluateEffectivePom(@NotNull File file, @NotNull List<String> activeProfiles)
+    throws RemoteException, MavenServerProcessCanceledException {
+    return MavenEffectivePomDumper.evaluateEffectivePom(this, file, activeProfiles);
   }
 
   public void executeWithMavenSession(MavenExecutionRequest request, Runnable runnable) {
@@ -620,7 +631,18 @@ public class Maven3ServerEmbedderImpl extends MavenRemoteObject implements Maven
 
   public void resolve(@NotNull final Artifact artifact, @NotNull final List<ArtifactRepository> repos)
           throws ArtifactResolutionException, ArtifactNotFoundException {
-      getComponent(ArtifactResolver.class).resolve(artifact, repos, myLocalRepository);
+
+    MavenExecutionRequest request = new DefaultMavenExecutionRequest();
+    request.setRemoteRepositories(repos);
+    try {
+      getComponent(MavenExecutionRequestPopulator.class).populateFromSettings(request, myMavenSettings);
+      getComponent(MavenExecutionRequestPopulator.class).populateDefaults(request);
+    }
+    catch (MavenExecutionRequestPopulationException e) {
+      throw new RuntimeException(e);
+    }
+
+    getComponent(ArtifactResolver.class).resolve(artifact, request.getRemoteRepositories(), myLocalRepository);
   }
 
   private List<ArtifactRepository> convertRepositories(List<MavenRemoteRepository> repositories) throws RemoteException {

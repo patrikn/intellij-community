@@ -52,8 +52,7 @@ public abstract class XFetchValueActionBase extends AnAction {
       for (TreePath path : paths) {
         Object node = path.getLastPathComponent();
         if (node instanceof XValueNodeImpl) {
-          XValueNodeImpl valueNode = (XValueNodeImpl)node;
-          if (valueNode.getName() != null && valueNode.getValue() != null) {
+          if (((XValueNodeImpl)node).isComputed()) {
             e.getPresentation().setEnabled(true);
             return;
           }
@@ -81,7 +80,7 @@ public abstract class XFetchValueActionBase extends AnAction {
         XValueNodeImpl valueNode = (XValueNodeImpl)node;
         XFullValueEvaluator fullValueEvaluator = valueNode.getFullValueEvaluator();
         if (fullValueEvaluator == null) {
-          valueCollector.add(StringUtil.notNullize(valueNode.getValue()));
+          valueCollector.add(StringUtil.notNullize(valueNode.getRawValue()));
         }
         else {
           startFetchingValue(fullValueEvaluator, new CopyValueEvaluationCallback(valueNode.getTree().getSession(), valueCollector));

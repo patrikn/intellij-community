@@ -17,7 +17,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 
-public class LivePreviewController implements LivePreview.Delegate, FindUtil.ReplaceDelegate, SearchResults.SearchResultsListener {
+public class LivePreviewController implements LivePreview.Delegate, FindUtil.ReplaceDelegate {
 
   private static final Logger LOG = Logger.getInstance("#com.intellij.find.impl.livePreview.LivePreviewController");
 
@@ -30,7 +30,7 @@ public class LivePreviewController implements LivePreview.Delegate, FindUtil.Rep
   private final Alarm myLivePreviewAlarm = new Alarm(Alarm.ThreadToUse.SHARED_THREAD);
   protected SearchResults mySearchResults;
   private LivePreview myLivePreview;
-  private boolean myReplaceDenied = false;
+  private final boolean myReplaceDenied = false;
   private boolean mySuppressUpdate = false;
 
   private boolean myTrackingDocument;
@@ -38,7 +38,7 @@ public class LivePreviewController implements LivePreview.Delegate, FindUtil.Rep
 
   private boolean myListeningSelection = false;
 
-  private SelectionListener mySelectionListener = new SelectionListener() {
+  private final SelectionListener mySelectionListener = new SelectionListener() {
     @Override
     public void selectionChanged(SelectionEvent e) {
       smartUpdate();
@@ -60,7 +60,7 @@ public class LivePreviewController implements LivePreview.Delegate, FindUtil.Rep
   }
 
 
-  private DocumentAdapter myDocumentListener = new DocumentAdapter() {
+  private final DocumentAdapter myDocumentListener = new DocumentAdapter() {
     @Override
     public void documentChanged(final DocumentEvent e) {
       if (!myTrackingDocument) {
@@ -80,56 +80,6 @@ public class LivePreviewController implements LivePreview.Delegate, FindUtil.Rep
     updateInBackground(mySearchResults.getFindModel(), false);
   }
 
-  private void updateSelection() {
-    Editor editor = mySearchResults.getEditor();
-    SelectionModel selection = editor.getSelectionModel();
-    FindModel findModel = mySearchResults.getFindModel();
-    if (findModel != null && findModel.isGlobal()) {
-      FindResult cursor = mySearchResults.getCursor();
-      if (cursor != null) {
-        FoldingModel foldingModel = editor.getFoldingModel();
-        final FoldRegion startFolding = foldingModel.getCollapsedRegionAtOffset(cursor.getStartOffset());
-        final FoldRegion endFolding = foldingModel.getCollapsedRegionAtOffset(cursor.getEndOffset());
-        foldingModel.runBatchFoldingOperation(new Runnable() {
-          @Override
-          public void run() {
-            if (startFolding != null) {
-              startFolding.setExpanded(true);
-            }
-            if (endFolding != null) {
-              endFolding.setExpanded(true);
-            }
-          }
-        });
-        selection.setSelection(cursor.getStartOffset(), cursor.getEndOffset());
-
-        editor.getCaretModel().moveToOffset(cursor.getEndOffset());
-        editor.getScrollingModel().scrollToCaret(ScrollType.RELATIVE);
-
-      }
-    }
-  }
-
-  @Override
-  public void searchResultsUpdated(SearchResults sr) {
-
-  }
-
-  @Override
-  public void editorChanged(SearchResults sr, Editor oldEditor) {}
-
-  @Override
-  public void cursorMoved(boolean toChangeSelection) {
-    if (toChangeSelection) {
-      updateSelection();
-    }
-  }
-
-  @Override
-  public void updateFinished() {
-
-  }
-
   public void moveCursor(SearchResults.Direction direction) {
     if (direction == SearchResults.Direction.UP) {
       mySearchResults.prevOccurrence();
@@ -144,7 +94,6 @@ public class LivePreviewController implements LivePreview.Delegate, FindUtil.Rep
 
   public LivePreviewController(SearchResults searchResults, @Nullable EditorSearchComponent component) {
     mySearchResults = searchResults;
-    mySearchResults.addListener(this);
     myComponent = component;
     getEditor().getDocument().addDocumentListener(myDocumentListener);
   }

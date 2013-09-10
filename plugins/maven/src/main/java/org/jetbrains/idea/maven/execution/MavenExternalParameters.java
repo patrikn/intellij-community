@@ -144,6 +144,9 @@ public class MavenExternalParameters {
       params.getClassPath().add(path);
     }
 
+    params.setEnv(new HashMap<String, String>(runnerSettings.getEnvironmentProperties()));
+    params.setPassParentEnvs(runnerSettings.isPassParentEnv());
+
     params.setMainClass(MAVEN_LAUNCHER_CLASS);
     EncodingManager encodingManager = project == null
                                       ? EncodingProjectManager.getInstance()
@@ -502,7 +505,7 @@ public class MavenExternalParameters {
         stringBuilder.append(",");
       }
       if (!entry.getValue()) {
-        stringBuilder.append("-");
+        stringBuilder.append("!");
       }
       stringBuilder.append(entry.getKey());
     }

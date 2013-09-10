@@ -23,7 +23,9 @@
 package com.intellij.openapi.keymap.impl.ui;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.awt.im.InputContext;
 
 public class ShortcutTextField extends JTextField {
   private KeyStroke myKeyStroke;
@@ -61,5 +63,21 @@ public class ShortcutTextField extends JTextField {
 
   public KeyStroke getKeyStroke() {
     return myKeyStroke;
+  }
+
+  @Override
+  public InputContext getInputContext() {
+    final InputContext inputContext = super.getInputContext();
+    return new InputContext() {
+      @Override
+      public void dispatchEvent(AWTEvent event) {
+        if (event instanceof KeyEvent
+            && ((KeyEvent)event).getModifiers() != 0)
+        {
+          inputContext.endComposition();
+        }
+        inputContext.dispatchEvent(event);
+      }
+    };
   }
 }

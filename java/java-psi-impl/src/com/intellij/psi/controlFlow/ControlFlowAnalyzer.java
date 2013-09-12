@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2011 JetBrains s.r.o.
+ * Copyright 2000-2013 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import com.intellij.openapi.util.Comparing;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.containers.Stack;
 import gnu.trove.THashMap;
 import gnu.trove.TIntArrayList;
@@ -1266,7 +1267,7 @@ class ControlFlowAnalyzer extends JavaElementVisitor {
       rExpr.accept(this);
     }
 
-    PsiExpression lExpr = expression.getLExpression();
+    PsiExpression lExpr = PsiUtil.skipParenthesizedExprDown(expression.getLExpression());
     if (lExpr instanceof PsiReferenceExpression) {
       final PsiReferenceExpression referenceExpression = (PsiReferenceExpression)lExpr;
       if (!referenceExpression.isQualified()
@@ -1503,7 +1504,7 @@ class ControlFlowAnalyzer extends JavaElementVisitor {
     startElement(expression);
 
     IElementType op = expression.getOperationTokenType();
-    PsiExpression operand = expression.getOperand();
+    PsiExpression operand = PsiUtil.skipParenthesizedExprDown(expression.getOperand());
     operand.accept(this);
     if (op == JavaTokenType.PLUSPLUS || op == JavaTokenType.MINUSMINUS) {
       if (operand instanceof PsiReferenceExpression) {
@@ -1520,7 +1521,7 @@ class ControlFlowAnalyzer extends JavaElementVisitor {
   @Override public void visitPrefixExpression(PsiPrefixExpression expression) {
     startElement(expression);
 
-    PsiExpression operand = expression.getOperand();
+    PsiExpression operand = PsiUtil.skipParenthesizedExprDown(expression.getOperand());
     if (operand != null) {
       IElementType operationSign = expression.getOperationTokenType();
       if (operationSign == JavaTokenType.EXCL) {

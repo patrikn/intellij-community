@@ -32,6 +32,16 @@ public class a21  {
   void f4() {
     if (DEBUG && (fi < 3 || fi >4)) return;
   }
+
+  void f5(final int i) {
+    (<error descr="Cannot assign a value to final variable 'i'">i</error>) = 1;
+  }
+  void f6(final int i) {
+    (<error descr="Cannot assign a value to final variable 'i'">i</error>)++;
+  }
+  void f7(final int i) {
+    ++(<error descr="Cannot assign a value to final variable 'i'">i</error>);
+  }
 }
 class B extends a21 {
   public B() {
@@ -68,5 +78,17 @@ class Foo {
     if (previous != null) {
       <error descr="Cannot assign a value to final variable 'next'">previous.next</error> = this;
     }
+  }
+}
+class T1 {
+  private final int i1;
+  private final int i2;
+  private final int i3;
+  private final int i4;
+  {
+    (<error descr="Variable 'i1' might not have been initialized">i1</error>)++;
+    ++(<error descr="Variable 'i2' might not have been initialized">i2</error>);
+    <error descr="Variable 'i3' might not have been initialized">i3</error> += 1;
+    (i4) = 1;
   }
 }

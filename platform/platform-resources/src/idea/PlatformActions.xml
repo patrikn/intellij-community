@@ -564,7 +564,6 @@
       <action id="Console.History.Previous" class="com.intellij.openapi.actionSystem.EmptyAction"/>
       <action id="Console.History.Next" class="com.intellij.openapi.actionSystem.EmptyAction"/>
       <action id="Console.History.Browse" class="com.intellij.openapi.actionSystem.EmptyAction" icon="AllIcons.General.MessageHistory"/>
-      <action id="Console.History.BrowseTW" class="com.intellij.openapi.actionSystem.EmptyAction" use-shortcut-of="RecentFiles" icon="AllIcons.General.MessageHistory"/>
     </group>
 
     <group id="Internal" text="&amp;Internal Actions" internal="true" popup="true">
@@ -609,7 +608,6 @@
       <reference ref="MaintenanceGroup"/>
 
       <action internal="true" id="SendStatistics" class="com.intellij.internal.statistic.tmp.SendStatisticsAction" text="Send statistics"/>
-      <action internal="true" class="com.intellij.ide.projectWizard.NewProjectWizardAction" text="Launch New Project Wizard"/>
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </group>
 

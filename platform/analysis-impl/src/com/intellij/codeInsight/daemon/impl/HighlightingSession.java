@@ -13,12 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.intellij.codeInsight.template.emmet.processors;
+package com.intellij.codeInsight.daemon.impl;
 
-/**
- * User: zolotov
- * Date: 1/31/13
- */
-public interface EmmetPreprocessor {
+import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.colors.EditorColorsScheme;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.project.Project;
+import com.intellij.psi.PsiFile;
 
+public interface HighlightingSession {
+  Project getProject();
+  PsiFile getPsiFile();
+  Editor getEditor();
+  Document getDocument();
+  ProgressIndicator getProgressIndicator();
+  EditorColorsScheme getColorsScheme();
+  int getPassId();
 }
